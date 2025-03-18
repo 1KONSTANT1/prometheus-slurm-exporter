@@ -26,6 +26,7 @@ import (
 
 func init() {
 	// Metrics have to be registered to be exposed
+	prometheus.MustRegister(NewPrioCollector())
 	prometheus.MustRegister(NewJobCollector())
 	prometheus.MustRegister(NewNodeResCollector())
 	prometheus.MustRegister(NewAccountsCollector())   // from accounts.go
