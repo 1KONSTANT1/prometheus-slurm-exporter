@@ -94,8 +94,6 @@ type NodeCollector struct {
 	memTotal *prometheus.Desc
 }
 
-// NewNodeCollector creates a Prometheus collector to keep all our stats in
-// It returns a set of collections for consumption
 func NewNodeCollector() *NodeCollector {
 	labels := []string{"node", "status"}
 
