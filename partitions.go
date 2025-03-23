@@ -66,6 +66,15 @@ func NewPartitionsData() []byte {
 	return out
 }
 
+func GetDefaultData() []byte {
+	cmd := exec.Command("scontrol", "-o", "show", "partition")
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return out
+}
+
 type PartitionMetrics struct {
 	allocated float64
 	idle      float64
@@ -83,6 +92,7 @@ type NewPartitionMetrics struct {
 	nodelist    string
 	node_states string
 	reason      string
+	if_default  string
 }
 
 func ParsePartitionsMetrics() (map[string]*PartitionMetrics, map[string]*NewPartitionMetrics) {
@@ -123,7 +133,7 @@ func ParsePartitionsMetrics() (map[string]*PartitionMetrics, map[string]*NewPart
 			split := strings.Split(line, "|")
 			partition_name := split[0]
 			partition_name = partition_name[2:]
-			partitions_info[partition_name] = &NewPartitionMetrics{"", "", "", "", "", "", "", ""}
+			partitions_info[partition_name] = &NewPartitionMetrics{"", "", "", "", "", "", "", "", ""}
 			partitions_info[partition_name].available = split[1]
 			partitions_info[partition_name].node_count = split[2]
 			partitions_info[partition_name].groups = split[3]
