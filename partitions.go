@@ -58,7 +58,7 @@ func PartitionsPendingJobsData() []byte {
 }
 
 func NewPartitionsData() []byte {
-	cmd := exec.Command("sinfo", "-h", "-o \"%P|%a|%D|%g|%G|%I|%N|%T|%E\"")
+	cmd := exec.Command("sinfo", "-h", "-o \"%R|%a|%D|%g|%G|%I|%N|%T|%E\"")
 	out, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
