@@ -64,7 +64,7 @@ func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs) {
 			split := strings.Split(line, "|")
 			jobid := split[0]
 			jobid = jobid[2:]
-			priorities[jobid] = &PrioMetrics{"", "", "", "", "", "", "", "", "", "", "", ""}
+			priorities[jobid] = &PrioMetrics{}
 			priorities[jobid].priority = split[1]
 			priorities[jobid].age_factor = split[2]
 			priorities[jobid].assoc_factor = split[3]
@@ -81,25 +81,7 @@ func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs) {
 
 		}
 	}
-	config := PriorityConfigs{
-		PriorityParameters:           "",
-		PrioritySiteFactorParameters: "",
-		PrioritySiteFactorPlugin:     "",
-		PriorityDecayHalfLife:        "",
-		PriorityCalcPeriod:           "",
-		PriorityFavorSmall:           "",
-		PriorityFlags:                "",
-		PriorityMaxAge:               "",
-		PriorityUsageResetPeriod:     "",
-		PriorityType:                 "",
-		PriorityWeightAge:            "",
-		PriorityWeightAssoc:          "",
-		PriorityWeightFairShare:      "",
-		PriorityWeightJobSize:        "",
-		PriorityWeightPartition:      "",
-		PriorityWeightQOS:            "",
-		PriorityWeightTRES:           "",
-	}
+	config := PriorityConfigs{}
 	lines = strings.Split(string(PrioConfig()), "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "PriorityWeightTRES") {

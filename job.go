@@ -47,7 +47,7 @@ func ParseJobMetrics(input []byte) map[string]*JobsMetrics {
 			split := strings.Split(line, "|")
 			jobid := split[0]
 			jobid = jobid[2:]
-			jobs[jobid] = &JobsMetrics{"", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}
+			jobs[jobid] = &JobsMetrics{}
 			jobs[jobid].sub_time = split[1]
 			jobs[jobid].start_time = split[2]
 			jobs[jobid].end_time = split[3]

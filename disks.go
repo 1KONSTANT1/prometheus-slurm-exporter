@@ -55,7 +55,7 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 		split := strings.Split(line, " ")
 		disk_name := strings.Split(split[0], "=")[1]
 		disk_name = disk_name[1 : len(disk_name)-1]
-		disk_info[disk_name] = &DiskMetrics{0, 0, 0, 0, ""}
+		disk_info[disk_name] = &DiskMetrics{}
 		if strings.Split(split[1], "=")[1] != "\"\"" {
 			disk_info[disk_name].size_avail, _ = strconv.ParseFloat(strings.Split(split[1], "=")[1][1:len(strings.Split(split[1], "=")[1])-1], 64)
 		} else {
@@ -89,7 +89,7 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 			fmt.Println("JOB id is ", split[1])
 			if _, exists := jobs_io[split[1]]; !exists {
 				// Если ключа нет, создаем новый элемент
-				jobs_io[split[1]] = &Jobio{0, 0, ""}
+				jobs_io[split[1]] = &Jobio{}
 				jobs_io[split[1]].read, _ = strconv.ParseFloat(strings.Split(pid_io_lines[0], " ")[1], 64)
 				jobs_io[split[1]].write, _ = strconv.ParseFloat(strings.Split(pid_io_lines[1], " ")[1], 64)
 				hostname := string(GetHostName())

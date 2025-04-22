@@ -54,7 +54,7 @@ func ParseNodeMetrics(input []byte) map[string]*NodeMetrics {
 		nodeName := node[0]
 		nodeStatus := node[3] // mixed, allocated, etc.
 
-		nodes[nodeName] = &NodeMetrics{0, 0, 0, 0, 0, ""}
+		nodes[nodeName] = &NodeMetrics{}
 
 		memTotal, _ := strconv.ParseUint(node[1], 10, 64)
 

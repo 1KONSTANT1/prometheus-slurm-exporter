@@ -100,7 +100,7 @@ func ParseAcctMetrics() (map[int]*AcctMetrics, map[string]*QOSMetrics) {
 	for _, line := range lines {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")
-			assocs[i] = &AcctMetrics{"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}
+			assocs[i] = &AcctMetrics{}
 			assocs[i].cluster = split[0]
 			assocs[i].account = split[1]
 			if split[2] == "" {
@@ -203,7 +203,7 @@ func ParseAcctMetrics() (map[int]*AcctMetrics, map[string]*QOSMetrics) {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")
 			qos := split[0]
-			qoss[qos] = &QOSMetrics{"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}
+			qoss[qos] = &QOSMetrics{}
 			if split[1] == "" {
 				qoss[qos].priority = "None"
 			} else {

@@ -84,15 +84,17 @@ type PartitionMetrics struct {
 }
 
 type NewPartitionMetrics struct {
-	available   string
-	node_count  string
-	groups      string
-	gres        string
-	priority    string
-	nodelist    string
-	node_states string
-	reason      string
-	if_default  string
+	available           string
+	node_count          string
+	groups              string
+	gres                string
+	priority            string
+	nodelist            string
+	node_states         string
+	reason              string
+	if_default          string
+	priority_job_factor string
+	priority_tier       string
 }
 
 func ParsePartitionsMetrics() (map[string]*PartitionMetrics, map[string]*NewPartitionMetrics) {
@@ -104,7 +106,7 @@ func ParsePartitionsMetrics() (map[string]*PartitionMetrics, map[string]*NewPart
 			partition := strings.Split(line, ",")[0]
 			_, key := partitions[partition]
 			if !key {
-				partitions[partition] = &PartitionMetrics{0, 0, 0, 0, 0}
+				partitions[partition] = &PartitionMetrics{}
 			}
 			states := strings.Split(line, ",")[1]
 			allocated, _ := strconv.ParseFloat(strings.Split(states, "/")[0], 64)
@@ -128,12 +130,14 @@ func ParsePartitionsMetrics() (map[string]*PartitionMetrics, map[string]*NewPart
 	}
 	partitions_info := make(map[string]*NewPartitionMetrics)
 	lines = strings.Split(string(NewPartitionsData()), "\n")
+	partition_scontrol := string(GetDefaultData())
+	flag := false
 	for _, line := range lines {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")
 			partition_name := split[0]
 			partition_name = partition_name[2:]
-			partitions_info[partition_name] = &NewPartitionMetrics{"", "", "", "", "", "", "", "", ""}
+			partitions_info[partition_name] = &NewPartitionMetrics{}
 			partitions_info[partition_name].available = split[1]
 			partitions_info[partition_name].node_count = split[2]
 			partitions_info[partition_name].groups = split[3]
@@ -142,6 +146,29 @@ func ParsePartitionsMetrics() (map[string]*PartitionMetrics, map[string]*NewPart
 			partitions_info[partition_name].nodelist = split[6]
 			partitions_info[partition_name].node_states = split[7]
 			partitions_info[partition_name].reason = split[8][:len(split[8])-1]
+			flag = false
+			for _, scontrol_line := range strings.Split(partition_scontrol, "\n") {
+				for _, word := range strings.Fields(scontrol_line) {
+					if strings.HasPrefix(word, "PartitionName") {
+						if strings.Split(word, "=")[1] != partition_name {
+							break
+						}
+
+					}
+					if strings.HasPrefix(word, "PriorityJobFactor") {
+						partitions_info[partition_name].priority_job_factor = strings.Split(word, "=")[1]
+
+					}
+					if strings.HasPrefix(word, "PriorityTier") {
+						partitions_info[partition_name].priority_tier = strings.Split(word, "=")[1]
+						flag = true
+						break
+					}
+				}
+				if flag {
+					break
+				}
+			}
 		}
 	}
 
@@ -159,7 +186,7 @@ type PartitionsCollector struct {
 
 func NewPartitionsCollector() *PartitionsCollector {
 	labels := []string{"partition"}
-	new_labels := []string{"PARTITION", "AVAILABLE", "NODE_COUNT", "GROUPS", "GRES", "PRIORITY", "NODELIST", "NODES_STATES", "REASON"}
+	new_labels := []string{"PARTITION", "AVAILABLE", "NODE_COUNT", "GROUPS", "GRES", "PRIORITY", "NODELIST", "NODES_STATES", "REASON", "PriorityJobFactor", "PriorityTier"}
 	return &PartitionsCollector{
 		allocated:  prometheus.NewDesc("slurm_partition_cpus_allocated", "Allocated CPUs for partition", labels, nil),
 		idle:       prometheus.NewDesc("slurm_partition_cpus_idle", "Idle CPUs for partition", labels, nil),
@@ -199,6 +226,6 @@ func (pc *PartitionsCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 	for partition := range partitions {
-		ch <- prometheus.MustNewConstMetric(pc.partitions, prometheus.GaugeValue, float64(0), partition, partitions[partition].available, partitions[partition].node_count, partitions[partition].groups, partitions[partition].gres, partitions[partition].priority, partitions[partition].nodelist, partitions[partition].node_states, partitions[partition].reason)
+		ch <- prometheus.MustNewConstMetric(pc.partitions, prometheus.GaugeValue, float64(0), partition, partitions[partition].available, partitions[partition].node_count, partitions[partition].groups, partitions[partition].gres, partitions[partition].priority, partitions[partition].nodelist, partitions[partition].node_states, partitions[partition].reason, partitions[partition].priority_job_factor, partitions[partition].priority_tier)
 	}
 }

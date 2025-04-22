@@ -44,7 +44,7 @@ func ParseNodeResMetrics(input []byte, input2 []byte) map[string]*NodeResMetrics
 	for _, line := range linesUniq {
 		node_info := strings.Split(line, " ")
 		nodeid := strings.Split(node_info[0], "=")[1]
-		nodes[nodeid] = &NodeResMetrics{"", "", "", "", "", "", "", "", "", "", "", "", ""}
+		nodes[nodeid] = &NodeResMetrics{}
 		for i := range node_info {
 			if strings.Contains(node_info[i], "CPUAlloc") {
 				nodes[nodeid].cpu_alloc = strings.Split(node_info[i], "=")[1]
