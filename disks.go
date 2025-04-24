@@ -81,12 +81,9 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 	if err == nil {
 		lines = strings.Split(string(pids_lines), "\n")
 		lines = lines[1 : len(lines)-1]
-		fmt.Println(lines)
 		for _, line := range lines {
 			split := strings.Fields(line)
 			pid_io_lines := strings.Split(readProcIO(split[0]), "\n")
-			fmt.Println(pid_io_lines)
-			fmt.Println("JOB id is ", split[1])
 			if _, exists := jobs_io[split[1]]; !exists {
 				// Если ключа нет, создаем новый элемент
 				jobs_io[split[1]] = &Jobio{}

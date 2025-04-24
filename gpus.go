@@ -16,12 +16,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 package main
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/log"
 	"io/ioutil"
 	"os/exec"
-	"strings"
 	"strconv"
+	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/log"
 )
 
 type GPUsMetrics struct {
@@ -31,7 +32,13 @@ type GPUsMetrics struct {
 	utilization float64
 }
 
-func GPUsGetMetrics() *GPUsMetrics {
+type GPUusage struct {
+	gpu_usage    float64
+	memory_usage float64
+	hostname     string
+}
+
+func GPUsGetMetrics() (*GPUsMetrics, map[string]*GPUusage) {
 	return ParseGPUsMetrics()
 }
 
@@ -66,7 +73,7 @@ func ParseTotalGPUs() float64 {
 				descriptor := strings.Fields(line)[1]
 				descriptor = strings.TrimPrefix(descriptor, "gpu:")
 				descriptor = strings.Split(descriptor, "(")[0]
-				node_gpus, _ :=  strconv.ParseFloat(descriptor, 64)
+				node_gpus, _ := strconv.ParseFloat(descriptor, 64)
 				num_gpus += node_gpus
 			}
 		}
@@ -75,7 +82,7 @@ func ParseTotalGPUs() float64 {
 	return num_gpus
 }
 
-func ParseGPUsMetrics() *GPUsMetrics {
+func ParseGPUsMetrics() (*GPUsMetrics, map[string]*GPUusage) {
 	var gm GPUsMetrics
 	total_gpus := ParseTotalGPUs()
 	allocated_gpus := ParseAllocatedGPUs()
@@ -83,7 +90,56 @@ func ParseGPUsMetrics() *GPUsMetrics {
 	gm.idle = total_gpus - allocated_gpus
 	gm.total = total_gpus
 	gm.utilization = allocated_gpus / total_gpus
-	return &gm
+	pidJobMap := make(map[string][]string)
+	nvidia_pid := make(map[string]*GPUusage)
+	pids_lines, err := ShowPids()
+	if err == nil {
+		lines := strings.Split(string(pids_lines), "\n")
+		lines = lines[1 : len(lines)-1]
+		for _, line := range lines {
+			split := strings.Fields(line)
+			jobid := split[1]
+			pidJobMap[jobid] = append(pidJobMap[jobid], split[0])
+
+		}
+		lines = strings.Split(string(Nvidiamon()), "\n")
+		lines = lines[2 : len(lines)-1]
+		for _, line := range lines {
+			split := strings.Fields(line)
+			target_pid := split[1]
+			sm := split[3]
+			mem := split[4]
+			for jobid, pids := range pidJobMap {
+				for _, pid := range pids {
+					if pid == target_pid {
+						nvidia_sm, _ := strconv.ParseFloat(sm, 64)
+						nvidia_mem, _ := strconv.ParseFloat(mem, 64)
+						nvidia_pid[jobid] = &GPUusage{}
+						nvidia_pid[jobid].gpu_usage = nvidia_pid[jobid].gpu_usage + nvidia_sm
+						nvidia_pid[jobid].memory_usage = nvidia_pid[jobid].memory_usage + nvidia_mem
+						hostname := string(GetHostName())
+						if strings.Contains(hostname, ".") {
+							hostname = strings.Split(hostname, ".")[0]
+						}
+						nvidia_pid[jobid].hostname = hostname
+					}
+				}
+			}
+
+		}
+
+	}
+
+	return &gm, nvidia_pid
+}
+
+func Nvidiamon() []byte {
+	cmd := exec.Command("nvidia-smi", "pmon", "-c", "1")
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return out
 }
 
 // Execute the sinfo command and return its output
@@ -110,19 +166,24 @@ func Execute(command string, arguments []string) []byte {
  */
 
 func NewGPUsCollector() *GPUsCollector {
+	labels := []string{"JOBID", "HOSTNAME"}
 	return &GPUsCollector{
-		alloc: prometheus.NewDesc("slurm_gpus_alloc", "Allocated GPUs", nil, nil),
-		idle:  prometheus.NewDesc("slurm_gpus_idle", "Idle GPUs", nil, nil),
-		total: prometheus.NewDesc("slurm_gpus_total", "Total GPUs", nil, nil),
-		utilization: prometheus.NewDesc("slurm_gpus_utilization", "Total GPU utilization", nil, nil),
+		alloc:        prometheus.NewDesc("slurm_gpus_alloc", "Allocated GPUs", nil, nil),
+		idle:         prometheus.NewDesc("slurm_gpus_idle", "Idle GPUs", nil, nil),
+		total:        prometheus.NewDesc("slurm_gpus_total", "Total GPUs", nil, nil),
+		utilization:  prometheus.NewDesc("slurm_gpus_utilization", "Total GPU utilization", nil, nil),
+		gpu_usage:    prometheus.NewDesc("slurm_gpu_usage", "Job gpu usage", labels, nil),
+		memory_usage: prometheus.NewDesc("slurm_gpu_usage", "Memory gpu usage", labels, nil),
 	}
 }
 
 type GPUsCollector struct {
-	alloc       *prometheus.Desc
-	idle        *prometheus.Desc
-	total       *prometheus.Desc
-	utilization *prometheus.Desc
+	alloc        *prometheus.Desc
+	idle         *prometheus.Desc
+	total        *prometheus.Desc
+	utilization  *prometheus.Desc
+	gpu_usage    *prometheus.Desc
+	memory_usage *prometheus.Desc
 }
 
 // Send all metric descriptions
@@ -133,9 +194,13 @@ func (cc *GPUsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- cc.utilization
 }
 func (cc *GPUsCollector) Collect(ch chan<- prometheus.Metric) {
-	cm := GPUsGetMetrics()
+	cm, nvidia := GPUsGetMetrics()
 	ch <- prometheus.MustNewConstMetric(cc.alloc, prometheus.GaugeValue, cm.alloc)
 	ch <- prometheus.MustNewConstMetric(cc.idle, prometheus.GaugeValue, cm.idle)
 	ch <- prometheus.MustNewConstMetric(cc.total, prometheus.GaugeValue, cm.total)
 	ch <- prometheus.MustNewConstMetric(cc.utilization, prometheus.GaugeValue, cm.utilization)
+	for job := range nvidia {
+		ch <- prometheus.MustNewConstMetric(cc.gpu_usage, prometheus.GaugeValue, nvidia[job].gpu_usage, job, nvidia[job].hostname)
+		ch <- prometheus.MustNewConstMetric(cc.memory_usage, prometheus.GaugeValue, nvidia[job].memory_usage, job, nvidia[job].hostname)
+	}
 }
