@@ -37,7 +37,7 @@ func readProcIO(pid string) string {
 	// Читаем содержимое файла
 	data, err := ioutil.ReadFile(procIOPath)
 	if err != nil {
-		log.Fatal(err)
+		return "rchar: 0\nwchar: 0"
 	}
 
 	return string(data)
@@ -47,6 +47,11 @@ func readProcIO(pid string) string {
 // It returns a map of metrics per node
 func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio) {
 	disk_info := make(map[string]*DiskMetrics)
+	hostname := string(GetHostName())
+	hostname = strings.ReplaceAll(hostname, "\n", "")
+	if strings.Contains(hostname, ".") {
+		hostname = strings.Split(hostname, ".")[0]
+	}
 	lines := strings.Split(string(input), "\n")
 	for _, line := range lines {
 		if len(line) < 2 {
@@ -68,10 +73,6 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 		}
 		disk_info[disk_name].size, _ = strconv.ParseFloat(strings.Split(split[3], "=")[1][1:len(strings.Split(split[3], "=")[1])-1], 64)
 		disk_info[disk_name].size_used = disk_info[disk_name].fsize - disk_info[disk_name].size_avail
-		hostname := string(GetHostName())
-		if strings.Contains(hostname, ".") {
-			hostname = strings.Split(hostname, ".")[0]
-		}
 		disk_info[disk_name].hostname = hostname
 
 	}
@@ -81,21 +82,14 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 	if err == nil {
 		lines = strings.Split(string(pids_lines), "\n")
 		lines = lines[1 : len(lines)-1]
-		fmt.Println(lines)
 		for _, line := range lines {
 			split := strings.Fields(line)
 			pid_io_lines := strings.Split(readProcIO(split[0]), "\n")
-			fmt.Println(pid_io_lines)
-			fmt.Println("JOB id is ", split[1])
 			if _, exists := jobs_io[split[1]]; !exists {
 				// Если ключа нет, создаем новый элемент
 				jobs_io[split[1]] = &Jobio{}
 				jobs_io[split[1]].read, _ = strconv.ParseFloat(strings.Split(pid_io_lines[0], " ")[1], 64)
 				jobs_io[split[1]].write, _ = strconv.ParseFloat(strings.Split(pid_io_lines[1], " ")[1], 64)
-				hostname := string(GetHostName())
-				if strings.Contains(hostname, ".") {
-					hostname = strings.Split(hostname, ".")[0]
-				}
 				jobs_io[split[1]].hostname = hostname
 			} else {
 				// Если ключ уже существует, суммируем значения
