@@ -54,7 +54,7 @@ func ParseNodeMetrics(input []byte) map[string]*NodeMetrics {
 		nodeName := node[0]
 		nodeStatus := node[3] // mixed, allocated, etc.
 
-		nodes[nodeName] = &NodeMetrics{0, 0, 0, 0, 0, ""}
+		nodes[nodeName] = &NodeMetrics{}
 
 		memTotal, _ := strconv.ParseUint(node[1], 10, 64)
 
@@ -94,8 +94,6 @@ type NodeCollector struct {
 	memTotal *prometheus.Desc
 }
 
-// NewNodeCollector creates a Prometheus collector to keep all our stats in
-// It returns a set of collections for consumption
 func NewNodeCollector() *NodeCollector {
 	labels := []string{"node", "status"}
 

@@ -22,8 +22,10 @@ type JobsMetrics struct {
 	run_time   string
 	nodes      string
 	cpus       string
-	min_mem string
-	partition string
+	min_mem    string
+	partition  string
+	account    string
+	reason     string
 }
 
 func JobGetMetrics() map[string]*JobsMetrics {
@@ -45,7 +47,7 @@ func ParseJobMetrics(input []byte) map[string]*JobsMetrics {
 			split := strings.Split(line, "|")
 			jobid := split[0]
 			jobid = jobid[2:]
-			jobs[jobid] = &JobsMetrics{"", "", "", "", "", "", "", "", "", "", "", "", ""}
+			jobs[jobid] = &JobsMetrics{}
 			jobs[jobid].sub_time = split[1]
 			jobs[jobid].start_time = split[2]
 			jobs[jobid].end_time = split[3]
@@ -59,7 +61,9 @@ func ParseJobMetrics(input []byte) map[string]*JobsMetrics {
 			jobs[jobid].nodes = split[12]
 			jobs[jobid].cpus = split[13]
 			jobs[jobid].min_mem = split[14]
-			jobs[jobid].partition = split[15][:len(split[15])-1]
+			jobs[jobid].account = split[15]
+			jobs[jobid].reason = split[16]
+			jobs[jobid].partition = split[17][:len(split[17])-1]
 
 		}
 	}
@@ -70,7 +74,7 @@ func ParseJobMetrics(input []byte) map[string]*JobsMetrics {
 // NodeData executes the sinfo command to get data for each node
 // It returns the output of the sinfo command
 func JobData() []byte {
-	cmd := exec.Command("squeue", "-a", "-r", "-h", "-o \"%A|%V|%S|%e|%l|%L|%M|%T|%r|%u|%g|%Q|%N|%C|%m|%P\"")
+	cmd := exec.Command("squeue", "-a", "-r", "-h", "-o \"%A|%V|%S|%e|%l|%L|%M|%T|%r|%u|%g|%Q|%N|%C|%m|%a|%R|%P\"")
 	out, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
@@ -85,7 +89,7 @@ type JobCollector struct {
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewJobCollector() *JobCollector {
-	labels := []string{"JOBID", "SUBMIT_TIME", "START_TIME", "END_TIME", "TIME_LIMIT", "STATUS", "USER", "GROUP", "PRIORITY", "RUN_TIME", "NODELIST", "CPUS", "MIN_MEM_REQUSTED", "PARTITION"}
+	labels := []string{"JOBID", "SUBMIT_TIME", "START_TIME", "END_TIME", "TIME_LIMIT", "STATUS", "USER", "GROUP", "PRIORITY", "RUN_TIME", "NODELIST", "CPUS", "MIN_MEM_REQUSTED", "ACCOUNT", "PARTITION", "REASON"}
 
 	return &JobCollector{
 		time: prometheus.NewDesc("slurm_job_time", "TIME FOR JOB", labels, nil),
@@ -100,6 +104,6 @@ func (nc *JobCollector) Describe(ch chan<- *prometheus.Desc) {
 func (nc *JobCollector) Collect(ch chan<- prometheus.Metric) {
 	jobs := JobGetMetrics()
 	for job := range jobs {
-		ch <- prometheus.MustNewConstMetric(nc.time, prometheus.GaugeValue, float64(0), job, jobs[job].sub_time, jobs[job].start_time, jobs[job].end_time, jobs[job].time_limit, jobs[job].status, jobs[job].user, jobs[job].group, jobs[job].priority, jobs[job].run_time, jobs[job].nodes, jobs[job].cpus, jobs[job].min_mem, jobs[job].partition)
+		ch <- prometheus.MustNewConstMetric(nc.time, prometheus.GaugeValue, float64(0), job, jobs[job].sub_time, jobs[job].start_time, jobs[job].end_time, jobs[job].time_limit, jobs[job].status, jobs[job].user, jobs[job].group, jobs[job].priority, jobs[job].run_time, jobs[job].nodes, jobs[job].cpus, jobs[job].min_mem, jobs[job].account, jobs[job].partition, jobs[job].reason)
 	}
 }
