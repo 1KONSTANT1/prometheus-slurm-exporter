@@ -18,6 +18,7 @@ package main
 import (
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -55,21 +56,25 @@ type pidcpu struct {
 }
 
 type jobpcpuram struct {
-	cpu_usage float64
-	mem_usage float64
-	rss       float64
-	vsz       float64
-	hostname  string
+	cpu_usage  float64
+	mem_usage  float64
+	rss        float64
+	vsz        float64
+	hostname   string
+	swap_usage float64
 }
 
 type RAMmetrics struct {
-	total     float64
-	used      float64
-	free      float64
-	shared    float64
-	buff      float64
-	available float64
-	hostname  string
+	total      float64
+	used       float64
+	free       float64
+	shared     float64
+	buff       float64
+	available  float64
+	hostname   string
+	total_swap float64
+	used_swap  float64
+	free_swap  float64
 }
 
 func CPUsGetMetrics() (*CPUsMetrics, *NewCPUsMetrics, map[string]*pidcpu, map[string]*jobpcpuram, map[string]*pidmem, *RAMmetrics) {
@@ -82,11 +87,33 @@ func managestring(str string) string {
 }
 
 func pscommand(pid string) []byte {
+	if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
+		log.Printf("No such PID directory: /proc/%s", pid)
+		return []byte("0.0 0.0 0.0 0.0")
+	} else if err != nil {
+		log.Fatal(err)
+	}
 	cmd := exec.Command("ps", "-p", pid, "--format=pcpu,pmem,rss,vsz", "--no-header")
 
 	out, err := cmd.Output()
 	if err != nil {
-		return []byte("0.0 0.0 0.0 0.0")
+		log.Fatal(err)
+	}
+	return out
+}
+
+func get_swap(pid string) []byte {
+	if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
+		log.Printf("No such PID directory: /proc/%s", pid)
+		return []byte("VmSwap: 0 kB")
+	} else if err != nil {
+		log.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", "cat /proc/"+pid+"/status | grep VmSwap")
+
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
 	}
 	return out
 }
@@ -119,7 +146,7 @@ func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*
 
 	lines = strings.Split(string(CPUtop10()), "\n")
 	lines = lines[1 : len(lines)-1]
-	cpu_pids := make(map[string]*pidcpu)
+	cpu_pids := make(map[string]*pidcpu, 10)
 	for _, line := range lines {
 		comm := strings.Fields(line)[10]
 		cpu_pids[comm] = &pidcpu{}
@@ -143,6 +170,8 @@ func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*
 				job_cpu_pids[split[1]].rss, _ = strconv.ParseFloat(strings.Fields(out_line)[2], 64)
 				job_cpu_pids[split[1]].vsz, _ = strconv.ParseFloat(strings.Fields(out_line)[3], 64)
 				job_cpu_pids[split[1]].hostname = hostname
+				swap_line := string(get_swap(split[0]))
+				job_cpu_pids[split[1]].swap_usage, _ = strconv.ParseFloat(strings.Fields(swap_line)[1], 64)
 			} else {
 				// Если ключ уже существует, суммируем значения
 				out_line := string(pscommand(split[0]))
@@ -154,6 +183,9 @@ func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*
 				job_cpu_pids[split[1]].rss += new_rss
 				new_vsz, _ := strconv.ParseFloat(strings.Fields(out_line)[3], 64)
 				job_cpu_pids[split[1]].vsz += new_vsz
+				swap_line := string(get_swap(split[0]))
+				swap_us, _ := strconv.ParseFloat(strings.Fields(swap_line)[1], 64)
+				job_cpu_pids[split[1]].swap_usage += swap_us
 			}
 		}
 
@@ -161,7 +193,7 @@ func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*
 
 	lines = strings.Split(string(MEMtop10()), "\n")
 	lines = lines[1 : len(lines)-1]
-	mem_pids := make(map[string]*pidmem)
+	mem_pids := make(map[string]*pidmem, 10)
 	for _, line := range lines {
 		comm := strings.Fields(line)[10]
 		mem_pids[comm] = &pidmem{}
@@ -179,6 +211,10 @@ func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*
 	rrm.buff, _ = strconv.ParseFloat(split[5], 64)
 	rrm.available, _ = strconv.ParseFloat(split[6], 64)
 	rrm.hostname = hostname
+	split = strings.Fields(lines[2])
+	rrm.total_swap, _ = strconv.ParseFloat(split[1], 64)
+	rrm.used_swap, _ = strconv.ParseFloat(split[2], 64)
+	rrm.free_swap, _ = strconv.ParseFloat(split[3], 64)
 
 	return &cm, &ccm, cpu_pids, job_cpu_pids, mem_pids, &rrm
 }
@@ -259,6 +295,7 @@ func NewCPUsCollector() *CPUsCollector {
 		job_mem_usage: prometheus.NewDesc("slurm_mem_job_usage", "Total CPUs info", labels3, nil),
 		job_rss:       prometheus.NewDesc("slurm_mem_rss", "Total CPUs info", labels3, nil),
 		job_vsz:       prometheus.NewDesc("slurm_mem_vsz", "Total CPUs info", labels3, nil),
+		job_swap:      prometheus.NewDesc("slurm_mem_swap", "Total CPUs info", labels3, nil),
 		top_mem_usage: prometheus.NewDesc("slurm_mem_top_usage", "Total CPUs info", labels2, nil),
 		total_ram:     prometheus.NewDesc("slurm_ram_total", "Total CPUs info", labels4, nil),
 		used_ram:      prometheus.NewDesc("slurm_ram_used", "Total CPUs info", labels4, nil),
@@ -266,6 +303,9 @@ func NewCPUsCollector() *CPUsCollector {
 		shared_ram:    prometheus.NewDesc("slurm_ram_shared", "Total CPUs info", labels4, nil),
 		buff_ram:      prometheus.NewDesc("slurm_ram_buff", "Total CPUs info", labels4, nil),
 		available_ram: prometheus.NewDesc("slurm_ram_available", "Total CPUs info", labels4, nil),
+		total_swap:    prometheus.NewDesc("slurm_swap_total", "Total CPUs info", labels4, nil),
+		used_swap:     prometheus.NewDesc("slurm_swap_used", "Total CPUs info", labels4, nil),
+		free_swap:     prometheus.NewDesc("slurm_swap_free", "Total CPUs info", labels4, nil),
 	}
 }
 
@@ -280,6 +320,7 @@ type CPUsCollector struct {
 	job_mem_usage *prometheus.Desc
 	job_rss       *prometheus.Desc
 	job_vsz       *prometheus.Desc
+	job_swap      *prometheus.Desc
 	top_mem_usage *prometheus.Desc
 	total_ram     *prometheus.Desc
 	used_ram      *prometheus.Desc
@@ -287,6 +328,9 @@ type CPUsCollector struct {
 	shared_ram    *prometheus.Desc
 	buff_ram      *prometheus.Desc
 	available_ram *prometheus.Desc
+	total_swap    *prometheus.Desc
+	used_swap     *prometheus.Desc
+	free_swap     *prometheus.Desc
 }
 
 // Send all metric descriptions
@@ -301,6 +345,7 @@ func (cc *CPUsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- cc.job_mem_usage
 	ch <- cc.job_rss
 	ch <- cc.job_vsz
+	ch <- cc.job_swap
 	ch <- cc.top_mem_usage
 	ch <- cc.total_ram
 	ch <- cc.used_ram
@@ -324,6 +369,7 @@ func (cc *CPUsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(cc.job_mem_usage, prometheus.GaugeValue, job_metr[job].mem_usage, job, job_metr[job].hostname)
 		ch <- prometheus.MustNewConstMetric(cc.job_rss, prometheus.GaugeValue, job_metr[job].rss, job, job_metr[job].hostname)
 		ch <- prometheus.MustNewConstMetric(cc.job_vsz, prometheus.GaugeValue, job_metr[job].vsz, job, job_metr[job].hostname)
+		ch <- prometheus.MustNewConstMetric(cc.job_swap, prometheus.GaugeValue, job_metr[job].swap_usage, job, job_metr[job].hostname)
 	}
 	for comm := range top_mem {
 		ch <- prometheus.MustNewConstMetric(cc.top_mem_usage, prometheus.GaugeValue, top_mem[comm].mem_usage, comm, top_mem[comm].hostname)
@@ -334,4 +380,7 @@ func (cc *CPUsCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(cc.shared_ram, prometheus.GaugeValue, rrm.shared, rrm.hostname)
 	ch <- prometheus.MustNewConstMetric(cc.buff_ram, prometheus.GaugeValue, rrm.buff, rrm.hostname)
 	ch <- prometheus.MustNewConstMetric(cc.available_ram, prometheus.GaugeValue, rrm.available, rrm.hostname)
+	ch <- prometheus.MustNewConstMetric(cc.total_swap, prometheus.GaugeValue, rrm.total_swap, rrm.hostname)
+	ch <- prometheus.MustNewConstMetric(cc.used_swap, prometheus.GaugeValue, rrm.used_swap, rrm.hostname)
+	ch <- prometheus.MustNewConstMetric(cc.free_swap, prometheus.GaugeValue, rrm.free_swap, rrm.hostname)
 }
