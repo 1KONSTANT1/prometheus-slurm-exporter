@@ -4,6 +4,7 @@ import (
 	"log"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,6 +24,15 @@ type PrioMetrics struct {
 	partition        string
 	tres_factor      string
 	user             string
+}
+
+type JobPrioMetrics struct {
+	age_factor       float64
+	assoc_factor     float64
+	partition_factor float64
+	jobsize_factor   float64
+	nice_factor      float64
+	qos_factor       float64
 }
 
 type PriorityConfigs struct {
@@ -45,14 +55,15 @@ type PriorityConfigs struct {
 	PriorityWeightTRES           string
 }
 
-func PrioGetMetrics() (map[string]*PrioMetrics, PriorityConfigs) {
+func PrioGetMetrics() (map[string]*PrioMetrics, PriorityConfigs, map[string]*JobPrioMetrics) {
 	return ParsePrioMetrics(PrioData())
 }
 
 // ParseNodeMetrics takes the output of sinfo with node data
 // It returns a map of metrics per node
-func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs) {
-	priorities := make(map[string]*PrioMetrics)
+func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs, map[string]*JobPrioMetrics) {
+	priorities := make(map[string]*PrioMetrics, 15)
+	job_priorities := make(map[string]*JobPrioMetrics, 15)
 	lines := strings.Split(string(input), "\n")
 
 	// Sort and remove all the duplicates from the 'sinfo' output
@@ -78,6 +89,14 @@ func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs) {
 			priorities[jobid].partition = split[10]
 			priorities[jobid].tres_factor = split[11]
 			priorities[jobid].user = split[12][:len(split[12])-1]
+
+			job_priorities[jobid] = &JobPrioMetrics{}
+			job_priorities[jobid].age_factor, _ = strconv.ParseFloat(priorities[jobid].age_factor, 64)
+			job_priorities[jobid].assoc_factor, _ = strconv.ParseFloat(priorities[jobid].assoc_factor, 64)
+			job_priorities[jobid].partition_factor, _ = strconv.ParseFloat(priorities[jobid].partition_factor, 64)
+			job_priorities[jobid].jobsize_factor, _ = strconv.ParseFloat(priorities[jobid].jobsize_factor, 64)
+			job_priorities[jobid].nice_factor, _ = strconv.ParseFloat(priorities[jobid].nice_factor, 64)
+			job_priorities[jobid].qos_factor, _ = strconv.ParseFloat(priorities[jobid].qos_factor, 64)
 
 		}
 	}
@@ -142,7 +161,7 @@ func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs) {
 
 	}
 
-	return priorities, config
+	return priorities, config, job_priorities
 }
 
 // NodeData executes the sinfo command to get data for each node
@@ -166,21 +185,34 @@ func PrioConfig() []byte {
 }
 
 type PrioCollector struct {
-	prio     *prometheus.Desc
-	prioconf *prometheus.Desc
+	prio                 *prometheus.Desc
+	prioconf             *prometheus.Desc
+	job_age_factor       *prometheus.Desc
+	job_assoc_factor     *prometheus.Desc
+	job_jobsize_factor   *prometheus.Desc
+	job_nice_factor      *prometheus.Desc
+	job_partition_factor *prometheus.Desc
+	job_qos_factor       *prometheus.Desc
 }
 
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewPrioCollector() *PrioCollector {
 	labels := []string{"JOBID", "PRIORITY", "AGE_FACT", "ASSOC_FACT", "PARTITION_FACT", "JOBSIZE_FACT", "QOS", "NICE_FACT", "ACCOUNT", "QOS_FACT", "PARTITION", "TRES_FACT", "USER"}
+	labels2 := []string{"JOBID", "PARTITION"}
 
 	conf_labels := []string{"PriorityParameters", "PrioritySiteFactorParameters", "PrioritySiteFactorPlugin", "PriorityDecayHalfLife", "PriorityCalcPeriod", "PriorityFavorSmall", "PriorityFlags", "PriorityMaxAge", "PriorityUsageResetPeriod", "PriorityType", "PriorityWeightAge", "PriorityWeightAssoc", "PriorityWeightFairShare", "PriorityWeightJobSize", "PriorityWeightPartition", "PriorityWeightQOS", "PriorityWeightTRES"}
 
 	return &PrioCollector{
 		prio: prometheus.NewDesc("slurm_prio", "JOB's priority", labels, nil),
 
-		prioconf: prometheus.NewDesc("slurm_prio_conf", "SLurm Priority Configuration", conf_labels, nil),
+		prioconf:             prometheus.NewDesc("slurm_prio_conf", "SLurm Priority Configuration", conf_labels, nil),
+		job_age_factor:       prometheus.NewDesc("slurm_age_factor", "SLurm Priority Configuration", labels2, nil),
+		job_assoc_factor:     prometheus.NewDesc("slurm_assoc_factor", "SLurm Priority Configuration", labels2, nil),
+		job_jobsize_factor:   prometheus.NewDesc("slurm_jobsize_factor", "SLurm Priority Configuration", labels2, nil),
+		job_nice_factor:      prometheus.NewDesc("slurm_nice_factor", "SLurm Priority Configuration", labels2, nil),
+		job_partition_factor: prometheus.NewDesc("slurm_partition_factor", "SLurm Priority Configuration", labels2, nil),
+		job_qos_factor:       prometheus.NewDesc("slurm_qos_factor", "SLurm Priority Configuration", labels2, nil),
 	}
 
 }
@@ -188,12 +220,25 @@ func NewPrioCollector() *PrioCollector {
 // Send all metric Descriptions
 func (nc *PrioCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- nc.prio
+	ch <- nc.prioconf
+	ch <- nc.job_age_factor
+	ch <- nc.job_assoc_factor
+	ch <- nc.job_jobsize_factor
+	ch <- nc.job_nice_factor
+	ch <- nc.job_partition_factor
+	ch <- nc.job_qos_factor
 }
 
 func (nc *PrioCollector) Collect(ch chan<- prometheus.Metric) {
-	priorities, conf := PrioGetMetrics()
+	priorities, conf, job_priorities := PrioGetMetrics()
 	for job := range priorities {
 		ch <- prometheus.MustNewConstMetric(nc.prio, prometheus.GaugeValue, float64(0), job, priorities[job].priority, priorities[job].age_factor, priorities[job].assoc_factor, priorities[job].partition_factor, priorities[job].jobsize_factor, priorities[job].qos_name, priorities[job].nice_factor, priorities[job].account, priorities[job].qos_factor, priorities[job].partition, priorities[job].tres_factor, priorities[job].user)
+		ch <- prometheus.MustNewConstMetric(nc.job_age_factor, prometheus.GaugeValue, job_priorities[job].age_factor, job, priorities[job].partition)
+		ch <- prometheus.MustNewConstMetric(nc.job_assoc_factor, prometheus.GaugeValue, job_priorities[job].assoc_factor, job, priorities[job].partition)
+		ch <- prometheus.MustNewConstMetric(nc.job_jobsize_factor, prometheus.GaugeValue, job_priorities[job].jobsize_factor, job, priorities[job].partition)
+		ch <- prometheus.MustNewConstMetric(nc.job_nice_factor, prometheus.GaugeValue, job_priorities[job].nice_factor, job, priorities[job].partition)
+		ch <- prometheus.MustNewConstMetric(nc.job_partition_factor, prometheus.GaugeValue, job_priorities[job].partition_factor, job, priorities[job].partition)
+		ch <- prometheus.MustNewConstMetric(nc.job_qos_factor, prometheus.GaugeValue, job_priorities[job].qos_factor, job, priorities[job].partition)
 	}
 	ch <- prometheus.MustNewConstMetric(nc.prioconf, prometheus.GaugeValue, float64(0), conf.PriorityParameters, conf.PrioritySiteFactorParameters, conf.PrioritySiteFactorPlugin, conf.PriorityDecayHalfLife, conf.PriorityCalcPeriod, conf.PriorityFavorSmall, conf.PriorityFlags, conf.PriorityMaxAge, conf.PriorityUsageResetPeriod, conf.PriorityType, conf.PriorityWeightAge, conf.PriorityWeightAssoc, conf.PriorityWeightFairShare, conf.PriorityWeightJobSize, conf.PriorityWeightPartition, conf.PriorityWeightQOS, conf.PriorityWeightTRES)
 }
