@@ -13,11 +13,15 @@ import (
 
 // JobsMetrics stores metrics for each node
 type DiskMetrics struct {
-	fsize      float64
-	size_avail float64
-	size_used  float64
-	size       float64
-	hostname   string
+	fsize       float64
+	size_avail  float64
+	size_used   float64
+	size        float64
+	hostname    string
+	device_type string
+	parent_name string
+	disk_total  string
+	mountpoints string
 }
 
 type Jobio struct {
@@ -74,6 +78,32 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 		disk_info[disk_name].size, _ = strconv.ParseFloat(strings.Split(split[3], "=")[1][1:len(strings.Split(split[3], "=")[1])-1], 64)
 		disk_info[disk_name].size_used = disk_info[disk_name].fsize - disk_info[disk_name].size_avail
 		disk_info[disk_name].hostname = hostname
+		disk_info[disk_name].device_type = strings.Split(split[4], "=")[1][1 : len(strings.Split(split[4], "=")[1])-1]
+		if strings.Split(split[5], "=")[1] != "\"\"" {
+			disk_info[disk_name].parent_name = strings.Split(split[5], "=")[1][1 : len(strings.Split(split[5], "=")[1])-1]
+		} else {
+			disk_info[disk_name].parent_name = disk_name
+		}
+
+		if disk_info[disk_name].parent_name == disk_name {
+			disk_info[disk_name].disk_total = disk_name
+		} else {
+			str := disk_info[disk_name].parent_name
+			for {
+				if disk_info[str].parent_name != str {
+					str = disk_info[disk_info[str].parent_name].parent_name
+				} else {
+					disk_info[disk_name].disk_total = str
+					break
+				}
+			}
+		}
+
+		if strings.Split(split[6], "=")[1] != "\"\"" {
+			disk_info[disk_name].mountpoints = strings.Split(split[6], "=")[1][1 : len(strings.Split(split[6], "=")[1])-1]
+		} else {
+			disk_info[disk_name].mountpoints = "None"
+		}
 
 	}
 
@@ -108,7 +138,7 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 // NodeData executes the sinfo command to get data for each node
 // It returns the output of the sinfo command
 func DiskData() []byte {
-	cmd := exec.Command("lsblk", "-Pb", "-o", "NAME,FSAVAIL,FSSIZE,SIZE")
+	cmd := exec.Command("lsblk", "-Pb", "-o", "NAME,FSAVAIL,FSSIZE,SIZE,TYPE,PKNAME,MOUNTPOINTS")
 	out, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
@@ -142,7 +172,7 @@ type DiskCollector struct {
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewDiskCollector() *DiskCollector {
-	labels := []string{"DISK", "HOSTNAME"}
+	labels := []string{"DISK", "HOSTNAME", "TYPE", "PARENT", "DISK_TOTAL", "MOUNTPOINTS"}
 	labels2 := []string{"JOBID", "HOSTNAME"}
 	return &DiskCollector{
 		disk_fsize:      prometheus.NewDesc("slurm_disk_filesystemsize", "DISK INFOf", labels, nil),
@@ -167,10 +197,10 @@ func (nc *DiskCollector) Describe(ch chan<- *prometheus.Desc) {
 func (nc *DiskCollector) Collect(ch chan<- prometheus.Metric) {
 	disks, jobs_io := DiskGetMetrics()
 	for disk := range disks {
-		ch <- prometheus.MustNewConstMetric(nc.disk_fsize, prometheus.GaugeValue, disks[disk].fsize, disk, disks[disk].hostname)
-		ch <- prometheus.MustNewConstMetric(nc.disk_size, prometheus.GaugeValue, disks[disk].size, disk, disks[disk].hostname)
-		ch <- prometheus.MustNewConstMetric(nc.disk_size_avail, prometheus.GaugeValue, disks[disk].size_avail, disk, disks[disk].hostname)
-		ch <- prometheus.MustNewConstMetric(nc.disk_size_used, prometheus.GaugeValue, disks[disk].size_used, disk, disks[disk].hostname)
+		ch <- prometheus.MustNewConstMetric(nc.disk_fsize, prometheus.GaugeValue, disks[disk].fsize, disk, disks[disk].hostname, disks[disk].device_type, disks[disk].parent_name, disks[disk].disk_total, disks[disk].mountpoints)
+		ch <- prometheus.MustNewConstMetric(nc.disk_size, prometheus.GaugeValue, disks[disk].size, disk, disks[disk].hostname, disks[disk].device_type, disks[disk].parent_name, disks[disk].disk_total, disks[disk].mountpoints)
+		ch <- prometheus.MustNewConstMetric(nc.disk_size_avail, prometheus.GaugeValue, disks[disk].size_avail, disk, disks[disk].hostname, disks[disk].device_type, disks[disk].parent_name, disks[disk].disk_total, disks[disk].mountpoints)
+		ch <- prometheus.MustNewConstMetric(nc.disk_size_used, prometheus.GaugeValue, disks[disk].size_used, disk, disks[disk].hostname, disks[disk].device_type, disks[disk].parent_name, disks[disk].disk_total, disks[disk].mountpoints)
 	}
 	for job := range jobs_io {
 		ch <- prometheus.MustNewConstMetric(nc.jobs_read_disk, prometheus.GaugeValue, jobs_io[job].read, job, jobs_io[job].hostname)

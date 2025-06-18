@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -30,13 +31,39 @@ type JobsMetrics struct {
 	tres_per_node string
 }
 
-func JobGetMetrics() map[string]*JobsMetrics {
+type CompletedJobsMetrics struct {
+	user      string
+	account   string
+	state     string
+	partition string
+	start     string
+	end       string
+	elapsed   string
+	nodes     string
+	new_start string
+	new_end   string
+}
+
+func ShiftTimeBack(inputTime string) (string, error) {
+	t, err := time.Parse("2006-01-02T15:04:05", inputTime)
+	if err != nil {
+		log.Fatal()
+	}
+
+	// Отнимаем 3 часа
+	shiftedTime := t.Add(-3 * time.Hour)
+
+	// Форматируем результат обратно в строку
+	return shiftedTime.Format("2006-01-02T15:04:05"), nil
+}
+
+func JobGetMetrics() (map[string]*JobsMetrics, map[string]*CompletedJobsMetrics) {
 	return ParseJobMetrics(JobData())
 }
 
 // ParseNodeMetrics takes the output of sinfo with node data
 // It returns a map of metrics per node
-func ParseJobMetrics(input []byte) map[string]*JobsMetrics {
+func ParseJobMetrics(input []byte) (map[string]*JobsMetrics, map[string]*CompletedJobsMetrics) {
 	jobs := make(map[string]*JobsMetrics, 15)
 	lines := strings.Split(string(input), "\n")
 
@@ -71,7 +98,38 @@ func ParseJobMetrics(input []byte) map[string]*JobsMetrics {
 		}
 	}
 
-	return jobs
+	completed_jobs := make(map[string]*CompletedJobsMetrics, 15)
+	lines = strings.Split(string(CompletedJobData()), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "|") {
+			split := strings.Split(line, "|")
+			for i, val := range split {
+				if val == "" {
+					split[i] = "None"
+				}
+			}
+			jobid := strings.Fields(split[0])[0]
+			completed_jobs[jobid] = &CompletedJobsMetrics{}
+
+			completed_jobs[jobid].user = split[1]
+			completed_jobs[jobid].account = split[2]
+			completed_jobs[jobid].partition = split[3]
+			completed_jobs[jobid].state = split[4]
+			completed_jobs[jobid].start = split[5]
+			completed_jobs[jobid].end = split[6]
+			completed_jobs[jobid].elapsed = split[7]
+			completed_jobs[jobid].nodes = split[8]
+			if completed_jobs[jobid].start != "None" {
+				completed_jobs[jobid].new_start, _ = ShiftTimeBack(completed_jobs[jobid].start)
+			}
+			if completed_jobs[jobid].end != "None" {
+				completed_jobs[jobid].new_end, _ = ShiftTimeBack(completed_jobs[jobid].end)
+			}
+
+		}
+	}
+
+	return jobs, completed_jobs
 }
 
 func JobData() []byte {
@@ -83,28 +141,43 @@ func JobData() []byte {
 	return out
 }
 
+func CompletedJobData() []byte {
+	cmd := exec.Command("/bin/bash", "-c", "sacct -S now-30days -E now -o JobID,User,Account,Partition,State,Start,End,Elapsed,NodeList --parsable2 --noheader | grep -v \".batch\"")
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return out
+}
+
 type JobCollector struct {
-	time *prometheus.Desc
+	time      *prometheus.Desc
+	completed *prometheus.Desc
 }
 
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewJobCollector() *JobCollector {
 	labels := []string{"JOBID", "SUBMIT_TIME", "START_TIME", "END_TIME", "TIME_LIMIT", "STATUS", "USER", "GROUP", "PRIORITY", "RUN_TIME", "NODELIST", "CPUS", "MIN_MEM_REQUSTED", "ACCOUNT", "PARTITION", "REASON", "MIN_TMP_DISK", "TRES_PER_NODE"}
-
+	labels2 := []string{"JOBID", "USER", "ACCOUNT", "PARTITION", "STATE", "START", "END", "ELAPSED", "NODES", "NEW_START", "NEW_END"}
 	return &JobCollector{
-		time: prometheus.NewDesc("slurm_job_time", "TIME FOR JOB", labels, nil),
+		time:      prometheus.NewDesc("slurm_job_time", "TIME FOR JOB", labels, nil),
+		completed: prometheus.NewDesc("slurm_job_completed", "TIME FOR JOB", labels2, nil),
 	}
 }
 
 // Send all metric descriptions
 func (nc *JobCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- nc.time
+	ch <- nc.completed
 }
 
 func (nc *JobCollector) Collect(ch chan<- prometheus.Metric) {
-	jobs := JobGetMetrics()
+	jobs, completed := JobGetMetrics()
 	for job := range jobs {
 		ch <- prometheus.MustNewConstMetric(nc.time, prometheus.GaugeValue, float64(0), job, jobs[job].sub_time, jobs[job].start_time, jobs[job].end_time, jobs[job].time_limit, jobs[job].status, jobs[job].user, jobs[job].group, jobs[job].priority, jobs[job].run_time, jobs[job].nodes, jobs[job].cpus, jobs[job].min_mem, jobs[job].account, jobs[job].partition, jobs[job].reason, jobs[job].min_tmp_disk, jobs[job].tres_per_node)
+	}
+	for job := range completed {
+		ch <- prometheus.MustNewConstMetric(nc.completed, prometheus.GaugeValue, float64(0), job, completed[job].user, completed[job].account, completed[job].partition, completed[job].state, completed[job].start, completed[job].end, completed[job].elapsed, completed[job].nodes, completed[job].new_start, completed[job].new_end)
 	}
 }
