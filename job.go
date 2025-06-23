@@ -119,10 +119,10 @@ func ParseJobMetrics(input []byte) (map[string]*JobsMetrics, map[string]*Complet
 			completed_jobs[jobid].end = split[6]
 			completed_jobs[jobid].elapsed = split[7]
 			completed_jobs[jobid].nodes = split[8]
-			if completed_jobs[jobid].start != "None" {
+			if completed_jobs[jobid].start != "None" && completed_jobs[jobid].start != "Unknown" {
 				completed_jobs[jobid].new_start, _ = ShiftTimeBack(completed_jobs[jobid].start)
 			}
-			if completed_jobs[jobid].end != "None" {
+			if completed_jobs[jobid].end != "None" && completed_jobs[jobid].end != "Unknown" {
 				completed_jobs[jobid].new_end, _ = ShiftTimeBack(completed_jobs[jobid].end)
 			}
 
