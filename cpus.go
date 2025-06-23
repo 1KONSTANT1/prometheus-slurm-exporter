@@ -87,33 +87,31 @@ func managestring(str string) string {
 }
 
 func pscommand(pid string) []byte {
-	if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
-		log.Printf("No such PID directory: /proc/%s", pid)
-		return []byte("0.0 0.0 0.0 0.0")
-	} else if err != nil {
-		log.Fatal(err)
-	}
 	cmd := exec.Command("ps", "-p", pid, "--format=pcpu,pmem,rss,vsz", "--no-header")
 
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
+			//log.Printf("No such PID directory: /proc/%s", pid)
+			return []byte("0.0 0.0 0.0 0.0")
+		} else if err != nil {
+			log.Fatal(err)
+		}
 	}
 	return out
 }
 
 func get_swap(pid string) []byte {
-	if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
-		log.Printf("No such PID directory: /proc/%s", pid)
-		return []byte("VmSwap: 0 kB")
-	} else if err != nil {
-		log.Fatal(err)
-	}
 	cmd := exec.Command("/bin/sh", "-c", "cat /proc/"+pid+"/status | grep VmSwap")
 
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
+			//log.Printf("No such PID directory: /proc/%s", pid)
+			return []byte("VmSwap: 0 kB")
+		} else if err != nil {
+			log.Fatal(err)
+		}
 	}
 	return out
 }
