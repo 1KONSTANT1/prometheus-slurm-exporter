@@ -95,7 +95,13 @@ func pscommand(pid string) []byte {
 			//log.Printf("No such PID directory: /proc/%s", pid)
 			return []byte("0.0 0.0 0.0 0.0")
 		} else if err != nil {
-			log.Fatal(err)
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				log.Printf("Error executing ps -p %s command: %v, stderr: %s", pid, err, exitErr.Stderr)
+				os.Exit(1)
+			} else {
+				log.Printf("Error executing ps -p %s command: %v", pid, err)
+				os.Exit(1)
+			}
 		}
 	}
 	return out
@@ -110,7 +116,13 @@ func get_swap(pid string) []byte {
 			//log.Printf("No such PID directory: /proc/%s", pid)
 			return []byte("VmSwap: 0 kB")
 		} else if err != nil {
-			log.Fatal(err)
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				log.Printf("Error executing cat /proc/%s command: %v, stderr: %s", pid, err, exitErr.Stderr)
+				os.Exit(1)
+			} else {
+				log.Printf("Error executing cat /proc/%s command: %v", pid, err)
+				os.Exit(1)
+			}
 		}
 	}
 	return out
@@ -221,7 +233,13 @@ func CPUquery() []byte {
 	cmd := exec.Command("/bin/bash", "-c", "lscpu")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing lscpu command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing lscpu command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -230,7 +248,13 @@ func RAMquery() []byte {
 	cmd := exec.Command("/bin/bash", "-c", "free -b")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing free command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing free command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -239,7 +263,13 @@ func CPUtop10() []byte {
 	cmd := exec.Command("/bin/bash", "-c", "ps aux --sort=-%cpu | head -n 11")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing ps aux cpu command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing ps aux cpu command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -248,7 +278,13 @@ func MEMtop10() []byte {
 	cmd := exec.Command("/bin/bash", "-c", "ps aux --sort=-%mem | head -n 11")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing ps aux mem command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing ps aux mem command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }

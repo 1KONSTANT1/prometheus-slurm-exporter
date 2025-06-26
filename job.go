@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -47,7 +48,8 @@ type CompletedJobsMetrics struct {
 func ShiftTimeBack(inputTime string) (string, error) {
 	t, err := time.Parse("2006-01-02T15:04:05", inputTime)
 	if err != nil {
-		log.Fatal()
+		log.Printf("Error parsing time in ShiftTimeBack: %v", err)
+		os.Exit(1)
 	}
 
 	// Отнимаем 3 часа
@@ -136,7 +138,13 @@ func JobData() []byte {
 	cmd := exec.Command("/bin/bash", "-c", "squeue -a -r -h -O \"JOBID:|,SubmitTime:|,STARTTIME:|,ENDTIME:|,TIMELIMIT:|,TIMELEFT:|,TIMEUSED:|,STATE:|,REASON:|,USERNAME:|,GroupNAME:|,PRIORITYLONG:|,NODELIST:|,NumCPUs:|,MinMemory:|,ACCOUNT:|,ReasonList:|,MinTmpDisk:|,tres-per-node:|,PARTITION\"")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing squeue command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing squeue command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -145,7 +153,17 @@ func CompletedJobData() []byte {
 	cmd := exec.Command("/bin/bash", "-c", "sacct -S now-30days -E now -o JobID,User,Account,Partition,State,Start,End,Elapsed,NodeList --parsable2 --noheader | grep -v \".batch\"")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if len(exitErr.Stderr) == 0 && exitErr.ExitCode() == 1 {
+				return []byte{}
+			} else {
+				log.Printf("Error executing sacct command: %v, stderr: %s", err, exitErr.Stderr)
+				os.Exit(1)
+			}
+		} else {
+			log.Printf("Error executing sacct command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }

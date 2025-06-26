@@ -17,6 +17,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -27,7 +28,13 @@ func NewAcctData() []byte {
 	cmd := exec.Command("sacctmgr", "-n", "-p", "show", "assoc")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing sacctmgr assoc command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing sacctmgr assoc command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -36,7 +43,13 @@ func GetQOSData() []byte {
 	cmd := exec.Command("sacctmgr", "-n", "-p", "show", "qos")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing sacctmgr qos command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing sacctmgr qos command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
