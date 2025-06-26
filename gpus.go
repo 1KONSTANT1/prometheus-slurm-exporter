@@ -17,6 +17,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -126,7 +127,13 @@ func Nvidiamon() []byte {
 	cmd := exec.Command("nvidia-smi", "pmon", "-c", "1")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing nvidia-smi pmon command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing nvidia-smi pmon command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -135,7 +142,13 @@ func Nvidiaquery() []byte {
 	cmd := exec.Command("nvidia-smi", "--query-gpu=name,driver_version,vbios_version,pstate,memory.total,memory.used,utilization.gpu,utilization.memory,temperature.gpu,power.draw.instant,power.limit,uuid,index", "--format=csv")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing nvidia-smi --query-gpu command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing nvidia-smi --query-gpu command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }

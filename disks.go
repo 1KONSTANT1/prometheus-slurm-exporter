@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -41,7 +42,18 @@ func readProcIO(pid string) string {
 	// Читаем содержимое файла
 	data, err := ioutil.ReadFile(procIOPath)
 	if err != nil {
-		return "rchar: 0\nwchar: 0"
+		if _, err := os.Stat(procIOPath); os.IsNotExist(err) {
+			//log.Printf("No such PID directory: /proc/%s", pid)
+			return "rchar: 0\nwchar: 0"
+		} else if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				log.Printf("Error reading from %s pid: %v, stderr: %s", pid, err, exitErr.Stderr)
+				os.Exit(1)
+			} else {
+				log.Printf("Error reading from %s pid: %v", pid, err)
+				os.Exit(1)
+			}
+		}
 	}
 
 	return string(data)
@@ -141,7 +153,13 @@ func DiskData() []byte {
 	cmd := exec.Command("lsblk", "-Pb", "-o", "NAME,FSAVAIL,FSSIZE,SIZE,TYPE,PKNAME,MOUNTPOINTS")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing lsblk command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing lsblk command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -149,7 +167,13 @@ func GetHostName() []byte {
 	cmd := exec.Command("hostname")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing hostname command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing hostname command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }

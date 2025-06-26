@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -170,7 +171,13 @@ func PrioData() []byte {
 	cmd := exec.Command("sprio", "-h", "-o \"%i|%Y|%A|%B|%P|%J|%n|%N|%o|%Q|%r|%T|%u\"")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing sprio command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing sprio command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -179,7 +186,13 @@ func PrioConfig() []byte {
 	cmd := exec.Command("scontrol", "show", "conf")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing scontrol conf command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing scontrol conf command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
