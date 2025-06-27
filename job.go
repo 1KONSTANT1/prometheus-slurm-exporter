@@ -43,6 +43,8 @@ type CompletedJobsMetrics struct {
 	nodes     string
 	new_start string
 	new_end   string
+	qos       string
+	priority  string
 }
 
 func ShiftTimeBack(inputTime string) (string, error) {
@@ -121,6 +123,8 @@ func ParseJobMetrics(input []byte) (map[string]*JobsMetrics, map[string]*Complet
 			completed_jobs[jobid].end = split[6]
 			completed_jobs[jobid].elapsed = split[7]
 			completed_jobs[jobid].nodes = split[8]
+			completed_jobs[jobid].priority = split[9]
+			completed_jobs[jobid].qos = split[10]
 			if completed_jobs[jobid].start != "None" && completed_jobs[jobid].start != "Unknown" {
 				completed_jobs[jobid].new_start, _ = ShiftTimeBack(completed_jobs[jobid].start)
 			}
@@ -150,7 +154,7 @@ func JobData() []byte {
 }
 
 func CompletedJobData() []byte {
-	cmd := exec.Command("/bin/bash", "-c", "sacct -S now-30days -E now -o JobID,User,Account,Partition,State,Start,End,Elapsed,NodeList --parsable2 --noheader | grep -v \".batch\"")
+	cmd := exec.Command("/bin/bash", "-c", "sacct -S now-30days -E now -o JobID,User,Account,Partition,State,Start,End,Elapsed,NodeList,Priority,QOS --parsable2 --noheader | grep -v \".batch\"")
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -177,7 +181,7 @@ type JobCollector struct {
 // It returns a set of collections for consumption
 func NewJobCollector() *JobCollector {
 	labels := []string{"JOBID", "SUBMIT_TIME", "START_TIME", "END_TIME", "TIME_LIMIT", "STATUS", "USER", "GROUP", "PRIORITY", "RUN_TIME", "NODELIST", "CPUS", "MIN_MEM_REQUSTED", "ACCOUNT", "PARTITION", "REASON", "MIN_TMP_DISK", "TRES_PER_NODE"}
-	labels2 := []string{"JOBID", "USER", "ACCOUNT", "PARTITION", "STATE", "START", "END", "ELAPSED", "NODES", "NEW_START", "NEW_END"}
+	labels2 := []string{"JOBID", "USER", "ACCOUNT", "PARTITION", "STATE", "START", "END", "ELAPSED", "NODES", "NEW_START", "NEW_END", "PRIORITY", "QOS"}
 	return &JobCollector{
 		time:      prometheus.NewDesc("slurm_job_time", "TIME FOR JOB", labels, nil),
 		completed: prometheus.NewDesc("slurm_job_completed", "TIME FOR JOB", labels2, nil),
@@ -196,6 +200,6 @@ func (nc *JobCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(nc.time, prometheus.GaugeValue, float64(0), job, jobs[job].sub_time, jobs[job].start_time, jobs[job].end_time, jobs[job].time_limit, jobs[job].status, jobs[job].user, jobs[job].group, jobs[job].priority, jobs[job].run_time, jobs[job].nodes, jobs[job].cpus, jobs[job].min_mem, jobs[job].account, jobs[job].partition, jobs[job].reason, jobs[job].min_tmp_disk, jobs[job].tres_per_node)
 	}
 	for job := range completed {
-		ch <- prometheus.MustNewConstMetric(nc.completed, prometheus.GaugeValue, float64(0), job, completed[job].user, completed[job].account, completed[job].partition, completed[job].state, completed[job].start, completed[job].end, completed[job].elapsed, completed[job].nodes, completed[job].new_start, completed[job].new_end)
+		ch <- prometheus.MustNewConstMetric(nc.completed, prometheus.GaugeValue, float64(0), job, completed[job].user, completed[job].account, completed[job].partition, completed[job].state, completed[job].start, completed[job].end, completed[job].elapsed, completed[job].nodes, completed[job].new_start, completed[job].new_end, completed[job].priority, completed[job].qos)
 	}
 }
