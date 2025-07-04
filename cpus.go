@@ -104,6 +104,12 @@ func pscommand(pid string) []byte {
 			}
 		}
 	}
+
+	outArr := strings.Fields(string(out))
+	if len(outArr) < 2 {
+		return []byte("VmSwap: 0 kB")
+	}
+
 	return out
 }
 
@@ -124,6 +130,12 @@ func get_swap(pid string) []byte {
 				os.Exit(1)
 			}
 		}
+	}
+
+	outArr := strings.Fields(string(out))
+
+	if len(outArr) < 2 {
+		return []byte("VmSwap: 0 kB")
 	}
 	return out
 }
