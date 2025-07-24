@@ -57,7 +57,9 @@ type pidcpu struct {
 
 type jobpcpuram struct {
 	cpu_usage  float64
+	cpu_count  float64
 	mem_usage  float64
+	mem_count  float64
 	rss        float64
 	vsz        float64
 	hostname   string
@@ -140,6 +142,56 @@ func get_swap(pid string) []byte {
 	return out
 }
 
+func get_sontrol_job(job string) []byte {
+	cmd := exec.Command("/bin/sh", "-c", "scontrol show job "+job+" -do")
+
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return out
+}
+
+func parseSlurmOutput(slurmStr string, node_name string) (float64, float64) {
+
+	// Разбиваем строку по пробелам
+	parts := strings.Fields(slurmStr)
+
+	flag := false
+
+	res_cpu := 0.0
+	res_mem := 0.0
+
+	for _, part := range parts {
+		if strings.HasPrefix(part, "Nodes=") && strings.Contains(part, node_name) {
+			flag = true
+		}
+
+		if flag {
+			if strings.HasPrefix(part, "CPU_IDs=") {
+				cpuIDs := strings.TrimPrefix(part, "CPU_IDs=")
+				for _, cpu_range := range strings.Split(cpuIDs, ",") {
+					if strings.Contains(cpu_range, "-") {
+						sum := strings.Split(cpu_range, "-")
+						ch1, _ := strconv.ParseFloat(sum[0], 64)
+						ch2, _ := strconv.ParseFloat(sum[1], 64)
+						res_cpu = res_cpu + (ch2 - ch1 + 1)
+					} else {
+						res_cpu = res_cpu + 1
+					}
+				}
+
+			} else if strings.HasPrefix(part, "Mem=") {
+				memStr := strings.TrimPrefix(part, "Mem=")
+				res_mem, _ = strconv.ParseFloat(memStr, 64)
+				break
+			}
+		}
+	}
+
+	return res_cpu, res_mem
+}
+
 func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*pidcpu, map[string]*jobpcpuram, map[string]*pidmem, *RAMmetrics) {
 	var cm CPUsMetrics
 	if strings.Contains(string(input), "/") {
@@ -194,6 +246,7 @@ func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*
 				job_cpu_pids[split[1]].hostname = hostname
 				swap_line := string(get_swap(split[0]))
 				job_cpu_pids[split[1]].swap_usage, _ = strconv.ParseFloat(strings.Fields(swap_line)[1], 64)
+				job_cpu_pids[split[1]].cpu_count, job_cpu_pids[split[1]].mem_count = parseSlurmOutput(string(get_sontrol_job(split[1])), hostname)
 			} else {
 				// Если ключ уже существует, суммируем значения
 				out_line := string(pscommand(split[0]))
@@ -331,52 +384,60 @@ func NewCPUsCollector() *CPUsCollector {
 	labels4 := []string{"HOSTNAME"}
 
 	return &CPUsCollector{
-		alloc:         prometheus.NewDesc("slurm_cpus_alloc", "Allocated CPUs", nil, nil),
-		idle:          prometheus.NewDesc("slurm_cpus_idle", "Idle CPUs", nil, nil),
-		other:         prometheus.NewDesc("slurm_cpus_other", "Mix CPUs", nil, nil),
-		total:         prometheus.NewDesc("slurm_cpus_total", "Total CPUs", nil, nil),
-		cpu_info:      prometheus.NewDesc("slurm_cpu_info", "Total CPUs info", labels, nil),
-		top_cpu_usage: prometheus.NewDesc("slurm_cpu_top_usage", "Total CPUs info", labels2, nil),
-		job_cpu_usage: prometheus.NewDesc("slurm_cpu_job_usage", "Total CPUs info", labels3, nil),
-		job_mem_usage: prometheus.NewDesc("slurm_mem_job_usage", "Total CPUs info", labels3, nil),
-		job_rss:       prometheus.NewDesc("slurm_mem_rss", "Total CPUs info", labels3, nil),
-		job_vsz:       prometheus.NewDesc("slurm_mem_vsz", "Total CPUs info", labels3, nil),
-		job_swap:      prometheus.NewDesc("slurm_mem_swap", "Total CPUs info", labels3, nil),
-		top_mem_usage: prometheus.NewDesc("slurm_mem_top_usage", "Total CPUs info", labels2, nil),
-		total_ram:     prometheus.NewDesc("slurm_ram_total", "Total CPUs info", labels4, nil),
-		used_ram:      prometheus.NewDesc("slurm_ram_used", "Total CPUs info", labels4, nil),
-		free_ram:      prometheus.NewDesc("slurm_ram_free", "Total CPUs info", labels4, nil),
-		shared_ram:    prometheus.NewDesc("slurm_ram_shared", "Total CPUs info", labels4, nil),
-		buff_ram:      prometheus.NewDesc("slurm_ram_buff", "Total CPUs info", labels4, nil),
-		available_ram: prometheus.NewDesc("slurm_ram_available", "Total CPUs info", labels4, nil),
-		total_swap:    prometheus.NewDesc("slurm_swap_total", "Total CPUs info", labels4, nil),
-		used_swap:     prometheus.NewDesc("slurm_swap_used", "Total CPUs info", labels4, nil),
-		free_swap:     prometheus.NewDesc("slurm_swap_free", "Total CPUs info", labels4, nil),
+		alloc:                    prometheus.NewDesc("slurm_cpus_alloc", "Allocated CPUs", nil, nil),
+		idle:                     prometheus.NewDesc("slurm_cpus_idle", "Idle CPUs", nil, nil),
+		other:                    prometheus.NewDesc("slurm_cpus_other", "Mix CPUs", nil, nil),
+		total:                    prometheus.NewDesc("slurm_cpus_total", "Total CPUs", nil, nil),
+		cpu_info:                 prometheus.NewDesc("slurm_cpu_info", "Total CPUs info", labels, nil),
+		top_cpu_usage:            prometheus.NewDesc("slurm_cpu_top_usage", "Total CPUs info", labels2, nil),
+		job_cpu_usage:            prometheus.NewDesc("slurm_cpu_job_usage", "Total CPUs info", labels3, nil),
+		job_cpu_usage_normalized: prometheus.NewDesc("slurm_cpu_job_usage_normalized", "Total CPUs info", labels3, nil),
+		job_mem_usage_normalized: prometheus.NewDesc("slurm_mem_job_usage_normalized", "Total CPUs info", labels3, nil),
+		job_cpu_count:            prometheus.NewDesc("slurm_cpu_job_count", "Total CPUs info", labels3, nil),
+		job_mem_count:            prometheus.NewDesc("slurm_mem_job_count", "Total CPUs info", labels3, nil),
+		job_mem_usage:            prometheus.NewDesc("slurm_mem_job_usage", "Total CPUs info", labels3, nil),
+		job_rss:                  prometheus.NewDesc("slurm_mem_rss", "Total CPUs info", labels3, nil),
+		job_vsz:                  prometheus.NewDesc("slurm_mem_vsz", "Total CPUs info", labels3, nil),
+		job_swap:                 prometheus.NewDesc("slurm_mem_swap", "Total CPUs info", labels3, nil),
+		top_mem_usage:            prometheus.NewDesc("slurm_mem_top_usage", "Total CPUs info", labels2, nil),
+		total_ram:                prometheus.NewDesc("slurm_ram_total", "Total CPUs info", labels4, nil),
+		used_ram:                 prometheus.NewDesc("slurm_ram_used", "Total CPUs info", labels4, nil),
+		free_ram:                 prometheus.NewDesc("slurm_ram_free", "Total CPUs info", labels4, nil),
+		shared_ram:               prometheus.NewDesc("slurm_ram_shared", "Total CPUs info", labels4, nil),
+		buff_ram:                 prometheus.NewDesc("slurm_ram_buff", "Total CPUs info", labels4, nil),
+		available_ram:            prometheus.NewDesc("slurm_ram_available", "Total CPUs info", labels4, nil),
+		total_swap:               prometheus.NewDesc("slurm_swap_total", "Total CPUs info", labels4, nil),
+		used_swap:                prometheus.NewDesc("slurm_swap_used", "Total CPUs info", labels4, nil),
+		free_swap:                prometheus.NewDesc("slurm_swap_free", "Total CPUs info", labels4, nil),
 	}
 }
 
 type CPUsCollector struct {
-	alloc         *prometheus.Desc
-	idle          *prometheus.Desc
-	other         *prometheus.Desc
-	total         *prometheus.Desc
-	cpu_info      *prometheus.Desc
-	top_cpu_usage *prometheus.Desc
-	job_cpu_usage *prometheus.Desc
-	job_mem_usage *prometheus.Desc
-	job_rss       *prometheus.Desc
-	job_vsz       *prometheus.Desc
-	job_swap      *prometheus.Desc
-	top_mem_usage *prometheus.Desc
-	total_ram     *prometheus.Desc
-	used_ram      *prometheus.Desc
-	free_ram      *prometheus.Desc
-	shared_ram    *prometheus.Desc
-	buff_ram      *prometheus.Desc
-	available_ram *prometheus.Desc
-	total_swap    *prometheus.Desc
-	used_swap     *prometheus.Desc
-	free_swap     *prometheus.Desc
+	alloc                    *prometheus.Desc
+	idle                     *prometheus.Desc
+	other                    *prometheus.Desc
+	total                    *prometheus.Desc
+	cpu_info                 *prometheus.Desc
+	top_cpu_usage            *prometheus.Desc
+	job_cpu_usage            *prometheus.Desc
+	job_cpu_usage_normalized *prometheus.Desc
+	job_mem_usage_normalized *prometheus.Desc
+	job_mem_usage            *prometheus.Desc
+	job_cpu_count            *prometheus.Desc
+	job_mem_count            *prometheus.Desc
+	job_rss                  *prometheus.Desc
+	job_vsz                  *prometheus.Desc
+	job_swap                 *prometheus.Desc
+	top_mem_usage            *prometheus.Desc
+	total_ram                *prometheus.Desc
+	used_ram                 *prometheus.Desc
+	free_ram                 *prometheus.Desc
+	shared_ram               *prometheus.Desc
+	buff_ram                 *prometheus.Desc
+	available_ram            *prometheus.Desc
+	total_swap               *prometheus.Desc
+	used_swap                *prometheus.Desc
+	free_swap                *prometheus.Desc
 }
 
 // Send all metric descriptions
@@ -412,6 +473,10 @@ func (cc *CPUsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	for job := range job_metr {
 		ch <- prometheus.MustNewConstMetric(cc.job_cpu_usage, prometheus.GaugeValue, job_metr[job].cpu_usage, job, job_metr[job].hostname)
+		ch <- prometheus.MustNewConstMetric(cc.job_cpu_count, prometheus.GaugeValue, job_metr[job].cpu_count, job, job_metr[job].hostname)
+		ch <- prometheus.MustNewConstMetric(cc.job_cpu_usage_normalized, prometheus.GaugeValue, job_metr[job].cpu_usage/(job_metr[job].cpu_count*100)*100, job, job_metr[job].hostname)
+		ch <- prometheus.MustNewConstMetric(cc.job_mem_usage_normalized, prometheus.GaugeValue, job_metr[job].rss/(job_metr[job].mem_count*1024)*100, job, job_metr[job].hostname)
+		ch <- prometheus.MustNewConstMetric(cc.job_mem_count, prometheus.GaugeValue, job_metr[job].mem_count, job, job_metr[job].hostname)
 		ch <- prometheus.MustNewConstMetric(cc.job_mem_usage, prometheus.GaugeValue, job_metr[job].mem_usage, job, job_metr[job].hostname)
 		ch <- prometheus.MustNewConstMetric(cc.job_rss, prometheus.GaugeValue, job_metr[job].rss, job, job_metr[job].hostname)
 		ch <- prometheus.MustNewConstMetric(cc.job_vsz, prometheus.GaugeValue, job_metr[job].vsz, job, job_metr[job].hostname)
