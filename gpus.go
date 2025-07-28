@@ -35,7 +35,6 @@ type GPUsMetrics struct {
 	vbios_version      string
 	memory_total       float64
 	memory_used        float64
-	memory_used_true   float64
 	total_gpu_usage    float64
 	total_memory_usage float64
 	temperature        float64
@@ -46,11 +45,10 @@ type GPUsMetrics struct {
 }
 
 type GPUusage struct {
-	gpu_usage         float64
-	memory_usage      float64
-	memory_usage_true float64
-	hostname          string
-	index             string
+	gpu_usage        float64
+	allocated_memory float64
+	hostname         string
+	index            string
 }
 
 func GPUsGetMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
@@ -133,7 +131,7 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 		GpusMap[gpu_uuid].pstate = strings.Fields(split[3])[0]
 		GpusMap[gpu_uuid].memory_total, _ = strconv.ParseFloat(strings.Fields(split[4])[0], 64)
 		GpusMap[gpu_uuid].memory_used, _ = strconv.ParseFloat(strings.Fields(split[5])[0], 64)
-		GpusMap[gpu_uuid].memory_used_true, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", GpusMap[gpu_uuid].memory_used/GpusMap[gpu_uuid].memory_total*100), 64)
+		GpusMap[gpu_uuid].memory_used, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", GpusMap[gpu_uuid].memory_used/GpusMap[gpu_uuid].memory_total*100), 64)
 
 		GpusMap[gpu_uuid].total_gpu_usage, _ = strconv.ParseFloat(strings.Fields(split[6])[0], 64)
 		GpusMap[gpu_uuid].total_memory_usage, _ = strconv.ParseFloat(strings.Fields(split[7])[0], 64)
@@ -147,41 +145,35 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 
 	//pidJobMap := make(map[string][]string)
 	nvidia_pid := make(map[string]*GPUusage)
+	nvidia_lines := strings.Split(string(Nvidiamon()), "\n")
 	pids_lines, err := ShowPids()
-	if err == nil {
+	if err == nil && len(nvidia_lines) > 2 {
 		slurm_pid_lines := strings.Split(string(pids_lines), "\n")
 		slurm_pid_lines = slurm_pid_lines[1 : len(slurm_pid_lines)-1]
-		nvidia_lines := strings.Split(string(Nvidiamon()), "\n")
 		nvidia_lines = nvidia_lines[2 : len(nvidia_lines)-1]
 		for _, line := range nvidia_lines {
 			split := strings.Fields(line)
 			target_pid := split[1]
 			sm := split[3]
-			mem := split[4]
 			index := split[0]
 
 			for _, pid_line := range slurm_pid_lines {
 				split := strings.Fields(pid_line)
 				if split[0] == target_pid {
 					nvidia_sm := float64(0)
-					nvidia_mem := float64(0)
 
 					if sm != "-" {
 						nvidia_sm, _ = strconv.ParseFloat(sm, 64)
 					}
-					if mem != "-" {
-						nvidia_mem, _ = strconv.ParseFloat(mem, 64)
-					}
 
 					nvidia_pid[split[1]] = &GPUusage{}
 					nvidia_pid[split[1]].gpu_usage = nvidia_pid[split[1]].gpu_usage + nvidia_sm
-					nvidia_pid[split[1]].memory_usage = nvidia_pid[split[1]].memory_usage + nvidia_mem
 					nvidia_pid[split[1]].hostname = hostname
 					nvidia_pid[split[1]].index = index
 					nvidia_proc_info, _ := FindProcessByPID(string(NvidiSMI()), split[0])
-					nvidia_pid[split[1]].memory_usage_true, err = strconv.ParseFloat(fmt.Sprintf("%.1f", nvidia_proc_info.MemoryMB/GpusMap[nvidia_proc_info.GPUID].memory_total*100), 64)
+					nvidia_pid[split[1]].allocated_memory, err = strconv.ParseFloat(fmt.Sprintf("%.1f", nvidia_proc_info.MemoryMB/GpusMap[nvidia_proc_info.GPUID].memory_total*100), 64)
 					if err != nil {
-						nvidia_pid[split[1]].memory_usage_true = 0
+						nvidia_pid[split[1]].allocated_memory = 0
 					}
 				}
 			}
@@ -203,6 +195,21 @@ func Nvidiamon() []byte {
 			os.Exit(1)
 		} else {
 			log.Printf("Error executing nvidia-smi pmon command: %v", err)
+			os.Exit(1)
+		}
+	}
+	return out
+}
+
+func NvidiSMI() []byte {
+	cmd := exec.Command("nvidia-smi")
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing nvidia-smi command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing nvidia-smi command: %v", err)
 			os.Exit(1)
 		}
 	}
@@ -231,17 +238,15 @@ func Nvidiaquery() []byte {
  */
 
 func NewGPUsCollector() *GPUsCollector {
-	labels := []string{"JOBID", "HOSTNAME", "IDX", "MIG_NAME"}
+	labels := []string{"JOBID", "HOSTNAME", "IDX"}
 	labels2 := []string{"NAME", "DRIVER_VERSION", "PSTATE", "VBIOS_VERSION", "HOSTNAME", "IDX"}
 	labels3 := []string{"HOSTNAME", "IDX"}
 	return &GPUsCollector{
 		gpu_usage:          prometheus.NewDesc("slurm_gpu_usage", "Job gpu usage", labels, nil),
-		memory_usage:       prometheus.NewDesc("slurm_gpu_memory_usage", "Memory gpu usage", labels, nil),
-		memory_usage_true:  prometheus.NewDesc("slurm_gpu_memory_usage_true", "Memory gpu usage", labels, nil),
+		allocated_memory:   prometheus.NewDesc("slurm_gpu_memory_allocated", "Memory gpu usage", labels, nil),
 		gpu_info:           prometheus.NewDesc("slurm_gpu_info", "Slurm gpu info", labels2, nil),
 		total_memory:       prometheus.NewDesc("slurm_gpu_total_memory", "Slurm gpu info", labels3, nil),
 		used_memory:        prometheus.NewDesc("slurm_gpu_used_memory", "Slurm gpu info", labels3, nil),
-		used_memory_true:   prometheus.NewDesc("slurm_gpu_used_memory_true", "Slurm gpu info", labels3, nil),
 		total_gpu_usage:    prometheus.NewDesc("slurm_gpu_total_usage", "Slurm gpu info", labels3, nil),
 		total_memory_usage: prometheus.NewDesc("slurm_gpu_memory_total_usage", "Slurm gpu info", labels3, nil),
 		gpu_temp:           prometheus.NewDesc("slurm_gpu_temperature", "Slurm gpu info", labels3, nil),
@@ -253,11 +258,9 @@ func NewGPUsCollector() *GPUsCollector {
 type GPUsCollector struct {
 	gpu_info           *prometheus.Desc
 	gpu_usage          *prometheus.Desc
-	memory_usage       *prometheus.Desc
-	memory_usage_true  *prometheus.Desc
+	allocated_memory   *prometheus.Desc
 	total_memory       *prometheus.Desc
 	used_memory        *prometheus.Desc
-	used_memory_true   *prometheus.Desc
 	total_gpu_usage    *prometheus.Desc
 	total_memory_usage *prometheus.Desc
 	gpu_temp           *prometheus.Desc
@@ -269,7 +272,6 @@ type GPUsCollector struct {
 func (cc *GPUsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- cc.gpu_info
 	ch <- cc.gpu_usage
-	ch <- cc.memory_usage
 	ch <- cc.total_memory
 	ch <- cc.used_memory
 	ch <- cc.total_gpu_usage
@@ -284,7 +286,6 @@ func (cc *GPUsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(cc.gpu_info, prometheus.GaugeValue, float64(0), gpus_info[gpu].name, gpus_info[gpu].driver_version, gpus_info[gpu].pstate, gpus_info[gpu].vbios_version, gpus_info[gpu].hostname, gpus_info[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.total_memory, prometheus.GaugeValue, gpus_info[gpu].memory_total, gpus_info[gpu].hostname, gpus_info[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.used_memory, prometheus.GaugeValue, gpus_info[gpu].memory_used, gpus_info[gpu].hostname, gpus_info[gpu].index)
-		ch <- prometheus.MustNewConstMetric(cc.used_memory_true, prometheus.GaugeValue, gpus_info[gpu].memory_used_true, gpus_info[gpu].hostname, gpus_info[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.total_gpu_usage, prometheus.GaugeValue, gpus_info[gpu].total_gpu_usage, gpus_info[gpu].hostname, gpus_info[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.total_memory_usage, prometheus.GaugeValue, gpus_info[gpu].total_memory_usage, gpus_info[gpu].hostname, gpus_info[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.gpu_temp, prometheus.GaugeValue, gpus_info[gpu].temperature, gpus_info[gpu].hostname, gpus_info[gpu].index)
@@ -292,8 +293,7 @@ func (cc *GPUsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(cc.gpu_power_limit, prometheus.GaugeValue, gpus_info[gpu].power_limit, gpus_info[gpu].hostname, gpus_info[gpu].index)
 	}
 	for job := range nvidia {
-		ch <- prometheus.MustNewConstMetric(cc.gpu_usage, prometheus.GaugeValue, nvidia[job].gpu_usage, job, nvidia[job].hostname, nvidia[job].index, nvidia[job].mig_name)
-		ch <- prometheus.MustNewConstMetric(cc.memory_usage, prometheus.GaugeValue, nvidia[job].memory_usage, job, nvidia[job].hostname, nvidia[job].index, nvidia[job].mig_name)
-		ch <- prometheus.MustNewConstMetric(cc.memory_usage_true, prometheus.GaugeValue, nvidia[job].memory_usage_true, job, nvidia[job].hostname, nvidia[job].index, nvidia[job].mig_name)
+		ch <- prometheus.MustNewConstMetric(cc.gpu_usage, prometheus.GaugeValue, nvidia[job].gpu_usage, job, nvidia[job].hostname, nvidia[job].index)
+		ch <- prometheus.MustNewConstMetric(cc.allocated_memory, prometheus.GaugeValue, nvidia[job].allocated_memory, job, nvidia[job].hostname, nvidia[job].index)
 	}
 }
