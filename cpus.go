@@ -16,7 +16,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -79,8 +78,8 @@ type RAMmetrics struct {
 	free_swap  float64
 }
 
-func CPUsGetMetrics() (*CPUsMetrics, *NewCPUsMetrics, map[string]*pidcpu, map[string]*jobpcpuram, map[string]*pidmem, *RAMmetrics) {
-	return ParseCPUsMetrics(CPUsData())
+func CPUsGetMetrics() (*NewCPUsMetrics, map[string]*pidcpu, map[string]*jobpcpuram, map[string]*pidmem, *RAMmetrics) {
+	return ParseCPUsMetrics()
 }
 
 func managestring(str string) string {
@@ -183,15 +182,7 @@ func parseSlurmOutput(slurmStr string, node_name string) (float64, float64) {
 	return res_cpu, res_mem
 }
 
-func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*pidcpu, map[string]*jobpcpuram, map[string]*pidmem, *RAMmetrics) {
-	var cm CPUsMetrics
-	if strings.Contains(string(input), "/") {
-		splitted := strings.Split(strings.TrimSpace(string(input)), "/")
-		cm.alloc, _ = strconv.ParseFloat(splitted[0], 64)
-		cm.idle, _ = strconv.ParseFloat(splitted[1], 64)
-		cm.other, _ = strconv.ParseFloat(splitted[2], 64)
-		cm.total, _ = strconv.ParseFloat(splitted[3], 64)
-	}
+func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*pidcpu, map[string]*jobpcpuram, map[string]*pidmem, *RAMmetrics) {
 	var ccm NewCPUsMetrics
 	hostname := string(GetHostName())
 	hostname = strings.ReplaceAll(hostname, "\n", "")
@@ -282,7 +273,7 @@ func ParseCPUsMetrics(input []byte) (*CPUsMetrics, *NewCPUsMetrics, map[string]*
 	rrm.used_swap, _ = strconv.ParseFloat(split[2], 64)
 	rrm.free_swap, _ = strconv.ParseFloat(split[3], 64)
 
-	return &cm, &ccm, cpu_pids, job_cpu_pids, mem_pids, &rrm
+	return &ccm, cpu_pids, job_cpu_pids, mem_pids, &rrm
 }
 
 func CPUquery() []byte {
@@ -341,23 +332,6 @@ func MEMtop10() []byte {
 			log.Printf("Error executing ps aux mem command: %v", err)
 			os.Exit(1)
 		}
-	}
-	return out
-}
-
-// Execute the sinfo command and return its output
-func CPUsData() []byte {
-	cmd := exec.Command("sinfo", "-h", "-o %C")
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
-	}
-	out, _ := ioutil.ReadAll(stdout)
-	if err := cmd.Wait(); err != nil {
-		log.Fatal(err)
 	}
 	return out
 }
@@ -433,10 +407,6 @@ type CPUsCollector struct {
 
 // Send all metric descriptions
 func (cc *CPUsCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- cc.alloc
-	ch <- cc.idle
-	ch <- cc.other
-	ch <- cc.total
 	ch <- cc.cpu_info
 	ch <- cc.top_cpu_usage
 	ch <- cc.job_cpu_usage
@@ -453,11 +423,7 @@ func (cc *CPUsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- cc.available_ram
 }
 func (cc *CPUsCollector) Collect(ch chan<- prometheus.Metric) {
-	cm, ccm, top_cpu, job_metr, top_mem, rrm := CPUsGetMetrics()
-	ch <- prometheus.MustNewConstMetric(cc.alloc, prometheus.GaugeValue, cm.alloc)
-	ch <- prometheus.MustNewConstMetric(cc.idle, prometheus.GaugeValue, cm.idle)
-	ch <- prometheus.MustNewConstMetric(cc.other, prometheus.GaugeValue, cm.other)
-	ch <- prometheus.MustNewConstMetric(cc.total, prometheus.GaugeValue, cm.total)
+	ccm, top_cpu, job_metr, top_mem, rrm := CPUsGetMetrics()
 	ch <- prometheus.MustNewConstMetric(cc.cpu_info, prometheus.GaugeValue, float64(0), ccm.architecture, ccm.cpu_mode, ccm.byte_order, ccm.cores, ccm.model_name, ccm.vendorid, ccm.cpu_family, ccm.model, ccm.hostname)
 	for comm := range top_cpu {
 		ch <- prometheus.MustNewConstMetric(cc.top_cpu_usage, prometheus.GaugeValue, top_cpu[comm].cpu_usage, comm, top_cpu[comm].hostname)
