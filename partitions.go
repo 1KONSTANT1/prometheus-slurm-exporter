@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -12,7 +13,13 @@ func NewPartitionsData() []byte {
 	cmd := exec.Command("sinfo", "-h", "-o \"%R|%a|%D|%g|%G|%I|%N|%T|%E\"")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing sinfo partition command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing sinfo partition command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -21,7 +28,13 @@ func GetDefaultData() []byte {
 	cmd := exec.Command("scontrol", "-o", "show", "partition")
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing scontrol show partition command: %v, stderr: %s", err, exitErr.Stderr)
+			os.Exit(1)
+		} else {
+			log.Printf("Error executing scontrol show partition command: %v", err)
+			os.Exit(1)
+		}
 	}
 	return out
 }
@@ -92,9 +105,9 @@ type PartitionsCollector struct {
 }
 
 func NewPartitionsCollector() *PartitionsCollector {
-	new_labels := []string{"PARTITION", "AVAILABLE", "NODE_COUNT", "GROUPS", "GRES", "PRIORITY", "NODELIST", "NODES_STATES", "REASON", "PriorityJobFactor", "PriorityTier"}
+	partition_labels := []string{"PARTITION", "AVAILABLE", "NODE_COUNT", "GROUPS", "GRES", "PRIORITY", "NODELIST", "NODES_STATES", "REASON", "PriorityJobFactor", "PriorityTier"}
 	return &PartitionsCollector{
-		partitions: prometheus.NewDesc("slurm_partition_info", "Partitions info", new_labels, nil),
+		partitions: prometheus.NewDesc("slurm_partition_info", "Partitions info", partition_labels, nil),
 	}
 }
 

@@ -176,15 +176,15 @@ type DiskCollector struct {
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewDiskCollector() *DiskCollector {
-	labels := []string{"DISK", "HOSTNAME", "TYPE", "PARENT", "DISK_TOTAL", "MOUNTPOINTS"}
-	labels2 := []string{"JOBID", "HOSTNAME"}
+	disk_labels := []string{"DISK", "HOSTNAME", "TYPE", "PARENT", "DISK_TOTAL", "MOUNTPOINTS"}
+	job_disk_labels := []string{"JOBID", "HOSTNAME"}
 	return &DiskCollector{
-		disk_fsize:      prometheus.NewDesc("slurm_disk_filesystemsize", "DISK INFOf", labels, nil),
-		disk_size_avail: prometheus.NewDesc("slurm_disk_size_avail", "DISK INFOd", labels, nil),
-		disk_size_used:  prometheus.NewDesc("slurm_disk_size_used", "DISK INFOs", labels, nil),
-		disk_size:       prometheus.NewDesc("slurm_disk_size", "DISK INFOf", labels, nil),
-		jobs_read_disk:  prometheus.NewDesc("slurm_disk_jobs_read", "DISK INFOf", labels2, nil),
-		jobs_write_disk: prometheus.NewDesc("slurm_disk_jobs_write", "DISK INFOf", labels2, nil),
+		disk_fsize:      prometheus.NewDesc("slurm_disk_filesystemsize", "DISK fsize", disk_labels, nil),
+		disk_size_avail: prometheus.NewDesc("slurm_disk_size_avail", "DISK size avail", disk_labels, nil),
+		disk_size_used:  prometheus.NewDesc("slurm_disk_size_used", "DISK size used", disk_labels, nil),
+		disk_size:       prometheus.NewDesc("slurm_disk_size", "DISK size", disk_labels, nil),
+		jobs_read_disk:  prometheus.NewDesc("slurm_disk_jobs_read", "SLURM JOBS READ FROM DISK", job_disk_labels, nil),
+		jobs_write_disk: prometheus.NewDesc("slurm_disk_jobs_write", "SLURM JOBS WRITE TO DISK", job_disk_labels, nil),
 	}
 }
 
