@@ -163,26 +163,6 @@ func DiskData() []byte {
 	}
 	return out
 }
-func GetHostName() []byte {
-	cmd := exec.Command("hostname")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing hostname command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
-		} else {
-			log.Printf("Error executing hostname command: %v", err)
-			os.Exit(1)
-		}
-	}
-	return out
-}
-
-func ShowPids() ([]byte, error) {
-	cmd := exec.Command("scontrol", "listpids")
-	out, err := cmd.Output()
-	return out, err
-}
 
 type DiskCollector struct {
 	disk_fsize      *prometheus.Desc
