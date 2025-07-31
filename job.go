@@ -182,31 +182,31 @@ func CompletedJobData() []byte {
 }
 
 type JobCollector struct {
-	time      *prometheus.Desc
+	queue     *prometheus.Desc
 	completed *prometheus.Desc
 }
 
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewJobCollector() *JobCollector {
-	labels := []string{"JOBID", "SUBMIT_TIME", "START_TIME", "END_TIME", "TIME_LIMIT", "STATUS", "USER", "GROUP", "PRIORITY", "RUN_TIME", "NODELIST", "CPUS", "MIN_MEM_REQUSTED", "ACCOUNT", "PARTITION", "REASON", "MIN_TMP_DISK", "TRES_PER_NODE", "QOS", "TRES_ALLOC"}
-	labels2 := []string{"JOBID", "USER", "ACCOUNT", "PARTITION", "STATE", "START", "END", "ELAPSED", "NODES", "NEW_START", "NEW_END", "PRIORITY", "QOS", "ALLOC_TRES"}
+	queue_labels := []string{"JOBID", "SUBMIT_TIME", "START_TIME", "END_TIME", "TIME_LIMIT", "STATUS", "USER", "GROUP", "PRIORITY", "RUN_TIME", "NODELIST", "CPUS", "MIN_MEM_REQUSTED", "ACCOUNT", "PARTITION", "REASON", "MIN_TMP_DISK", "TRES_PER_NODE", "QOS", "TRES_ALLOC"}
+	completed_labels := []string{"JOBID", "USER", "ACCOUNT", "PARTITION", "STATE", "START", "END", "ELAPSED", "NODES", "NEW_START", "NEW_END", "PRIORITY", "QOS", "ALLOC_TRES"}
 	return &JobCollector{
-		time:      prometheus.NewDesc("slurm_job_time", "TIME FOR JOB", labels, nil),
-		completed: prometheus.NewDesc("slurm_job_completed", "TIME FOR JOB", labels2, nil),
+		queue:     prometheus.NewDesc("slurm_job_queue", "SLURM QUEUE INFO", queue_labels, nil),
+		completed: prometheus.NewDesc("slurm_job_completed", "SLURM COMPLETED JOBS FOR LAST 30 days", completed_labels, nil),
 	}
 }
 
 // Send all metric descriptions
 func (nc *JobCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- nc.time
+	ch <- nc.queue
 	ch <- nc.completed
 }
 
 func (nc *JobCollector) Collect(ch chan<- prometheus.Metric) {
 	jobs, completed := JobGetMetrics()
 	for job := range jobs {
-		ch <- prometheus.MustNewConstMetric(nc.time, prometheus.GaugeValue, float64(0), job, jobs[job].sub_time, jobs[job].start_time, jobs[job].end_time, jobs[job].time_limit, jobs[job].status, jobs[job].user, jobs[job].group, jobs[job].priority, jobs[job].run_time, jobs[job].nodes, jobs[job].cpus, jobs[job].min_mem, jobs[job].account, jobs[job].partition, jobs[job].reason, jobs[job].min_tmp_disk, jobs[job].tres_per_node, jobs[job].qos, jobs[job].tres_alloc)
+		ch <- prometheus.MustNewConstMetric(nc.queue, prometheus.GaugeValue, float64(0), job, jobs[job].sub_time, jobs[job].start_time, jobs[job].end_time, jobs[job].time_limit, jobs[job].status, jobs[job].user, jobs[job].group, jobs[job].priority, jobs[job].run_time, jobs[job].nodes, jobs[job].cpus, jobs[job].min_mem, jobs[job].account, jobs[job].partition, jobs[job].reason, jobs[job].min_tmp_disk, jobs[job].tres_per_node, jobs[job].qos, jobs[job].tres_alloc)
 	}
 	for job := range completed {
 		ch <- prometheus.MustNewConstMetric(nc.completed, prometheus.GaugeValue, float64(0), job, completed[job].user, completed[job].account, completed[job].partition, completed[job].state, completed[job].start, completed[job].end, completed[job].elapsed, completed[job].nodes, completed[job].new_start, completed[job].new_end, completed[job].priority, completed[job].qos, completed[job].alloc_tres)

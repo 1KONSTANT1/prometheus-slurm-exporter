@@ -1,18 +1,3 @@
-/* Copyright 2020 Joeri Hermans, Victor Penso, Matteo Dessalvi
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>. */
-
 package main
 
 import (
@@ -38,8 +23,6 @@ type GPUsMetrics struct {
 	total_gpu_usage    float64
 	total_memory_usage float64
 	temperature        float64
-	power_instant      float64
-	power_limit        float64
 	hostname           string
 	index              string
 }
@@ -137,8 +120,6 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 		GpusMap[gpu_uuid].total_memory_usage, _ = strconv.ParseFloat(strings.Fields(split[7])[0], 64)
 
 		GpusMap[gpu_uuid].temperature, _ = strconv.ParseFloat(strings.Fields(split[8])[0], 64)
-		GpusMap[gpu_uuid].power_instant, _ = strconv.ParseFloat(strings.Fields(split[9])[0], 64)
-		GpusMap[gpu_uuid].power_limit, _ = strconv.ParseFloat(strings.Fields(split[10])[0], 64)
 		GpusMap[gpu_uuid].index = strings.Fields(split[12])[0]
 		GpusMap[gpu_uuid].hostname = hostname
 	}
@@ -238,20 +219,18 @@ func Nvidiaquery() []byte {
  */
 
 func NewGPUsCollector() *GPUsCollector {
-	labels := []string{"JOBID", "HOSTNAME", "IDX"}
-	labels2 := []string{"NAME", "DRIVER_VERSION", "PSTATE", "VBIOS_VERSION", "HOSTNAME", "IDX"}
-	labels3 := []string{"HOSTNAME", "IDX"}
+	job_gpu_labels := []string{"JOBID", "HOSTNAME", "IDX"}
+	gpu_labels := []string{"NAME", "DRIVER_VERSION", "PSTATE", "VBIOS_VERSION", "HOSTNAME", "IDX"}
+	gpu_metric_labels := []string{"HOSTNAME", "IDX"}
 	return &GPUsCollector{
-		gpu_usage:          prometheus.NewDesc("slurm_gpu_usage", "Job gpu usage", labels, nil),
-		allocated_memory:   prometheus.NewDesc("slurm_gpu_memory_allocated", "Memory gpu usage", labels, nil),
-		gpu_info:           prometheus.NewDesc("slurm_gpu_info", "Slurm gpu info", labels2, nil),
-		total_memory:       prometheus.NewDesc("slurm_gpu_total_memory", "Slurm gpu info", labels3, nil),
-		used_memory:        prometheus.NewDesc("slurm_gpu_used_memory", "Slurm gpu info", labels3, nil),
-		total_gpu_usage:    prometheus.NewDesc("slurm_gpu_total_usage", "Slurm gpu info", labels3, nil),
-		total_memory_usage: prometheus.NewDesc("slurm_gpu_memory_total_usage", "Slurm gpu info", labels3, nil),
-		gpu_temp:           prometheus.NewDesc("slurm_gpu_temperature", "Slurm gpu info", labels3, nil),
-		gpu_power_instant:  prometheus.NewDesc("slurm_gpu_power_instant", "Slurm gpu info", labels3, nil),
-		gpu_power_limit:    prometheus.NewDesc("slurm_gpu_power_limit", "Slurm gpu info", labels3, nil),
+		gpu_usage:          prometheus.NewDesc("slurm_gpu_usage", "Job gpu usage", job_gpu_labels, nil),
+		allocated_memory:   prometheus.NewDesc("slurm_gpu_memory_allocated", "Memory gpu usage", job_gpu_labels, nil),
+		gpu_info:           prometheus.NewDesc("slurm_gpu_info", "Slurm gpu info", gpu_labels, nil),
+		total_memory:       prometheus.NewDesc("slurm_gpu_total_memory", "Slurm gpu total memory", gpu_metric_labels, nil),
+		used_memory:        prometheus.NewDesc("slurm_gpu_used_memory", "Slurm gpu used memory", gpu_metric_labels, nil),
+		total_gpu_usage:    prometheus.NewDesc("slurm_gpu_total_usage", "Slurm gpu total usage", gpu_metric_labels, nil),
+		total_memory_usage: prometheus.NewDesc("slurm_gpu_memory_total_usage", "Slurm gpu total memory usage", gpu_metric_labels, nil),
+		gpu_temp:           prometheus.NewDesc("slurm_gpu_temperature", "Slurm gpu temperature", gpu_metric_labels, nil),
 	}
 }
 
@@ -264,8 +243,6 @@ type GPUsCollector struct {
 	total_gpu_usage    *prometheus.Desc
 	total_memory_usage *prometheus.Desc
 	gpu_temp           *prometheus.Desc
-	gpu_power_instant  *prometheus.Desc
-	gpu_power_limit    *prometheus.Desc
 }
 
 // Send all metric descriptions
@@ -277,8 +254,6 @@ func (cc *GPUsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- cc.total_gpu_usage
 	ch <- cc.total_memory_usage
 	ch <- cc.gpu_temp
-	ch <- cc.gpu_power_instant
-	ch <- cc.gpu_power_limit
 }
 func (cc *GPUsCollector) Collect(ch chan<- prometheus.Metric) {
 	gpus_info, nvidia := GPUsGetMetrics()
@@ -289,8 +264,6 @@ func (cc *GPUsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(cc.total_gpu_usage, prometheus.GaugeValue, gpus_info[gpu].total_gpu_usage, gpus_info[gpu].hostname, gpus_info[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.total_memory_usage, prometheus.GaugeValue, gpus_info[gpu].total_memory_usage, gpus_info[gpu].hostname, gpus_info[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.gpu_temp, prometheus.GaugeValue, gpus_info[gpu].temperature, gpus_info[gpu].hostname, gpus_info[gpu].index)
-		ch <- prometheus.MustNewConstMetric(cc.gpu_power_instant, prometheus.GaugeValue, gpus_info[gpu].power_instant, gpus_info[gpu].hostname, gpus_info[gpu].index)
-		ch <- prometheus.MustNewConstMetric(cc.gpu_power_limit, prometheus.GaugeValue, gpus_info[gpu].power_limit, gpus_info[gpu].hostname, gpus_info[gpu].index)
 	}
 	for job := range nvidia {
 		ch <- prometheus.MustNewConstMetric(cc.gpu_usage, prometheus.GaugeValue, nvidia[job].gpu_usage, job, nvidia[job].hostname, nvidia[job].index)
