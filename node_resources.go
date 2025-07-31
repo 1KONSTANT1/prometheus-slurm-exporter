@@ -135,27 +135,27 @@ func NodeResData() ([]byte, []byte) {
 }
 
 type NodeResCollector struct {
-	time *prometheus.Desc
+	node_res *prometheus.Desc
 }
 
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewNodeResCollector() *NodeResCollector {
-	labels := []string{"NODE_NAME", "CPUAlloc", "CPUTot", "CPULoad", "RealMemory", "AllocMem", "FreeMem", "STATE", "PARTITIONS", "LastBusyTime", "BootTime", "SlurmdStartTime", "Reason", "IP"}
+	node_res_labels := []string{"NODE_NAME", "CPUAlloc", "CPUTot", "CPULoad", "RealMemory", "AllocMem", "FreeMem", "STATE", "PARTITIONS", "LastBusyTime", "BootTime", "SlurmdStartTime", "Reason", "IP"}
 
 	return &NodeResCollector{
-		time: prometheus.NewDesc("slurm_node_resources", "NODE RESOURCES", labels, nil),
+		node_res: prometheus.NewDesc("slurm_node_resources", "NODE RESOURCES", node_res_labels, nil),
 	}
 }
 
 // Send all metric descriptions
 func (nc *NodeResCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- nc.time
+	ch <- nc.node_res
 }
 
 func (nc *NodeResCollector) Collect(ch chan<- prometheus.Metric) {
 	nodes := NodeResGetMetrics()
 	for node := range nodes {
-		ch <- prometheus.MustNewConstMetric(nc.time, prometheus.GaugeValue, float64(0), node, nodes[node].cpu_alloc, nodes[node].cpu_total, nodes[node].cpu_load, nodes[node].real_mem, nodes[node].alloc_mem, nodes[node].free_mem, nodes[node].state, nodes[node].partitions, nodes[node].last_busy_time, nodes[node].boot_time, nodes[node].slurmd_start_time, nodes[node].reason, nodes[node].ip)
+		ch <- prometheus.MustNewConstMetric(nc.node_res, prometheus.GaugeValue, float64(0), node, nodes[node].cpu_alloc, nodes[node].cpu_total, nodes[node].cpu_load, nodes[node].real_mem, nodes[node].alloc_mem, nodes[node].free_mem, nodes[node].state, nodes[node].partitions, nodes[node].last_busy_time, nodes[node].boot_time, nodes[node].slurmd_start_time, nodes[node].reason, nodes[node].ip)
 	}
 }

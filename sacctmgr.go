@@ -340,11 +340,11 @@ type AcctCollector struct {
 }
 
 func NewAssocCollector() *AcctCollector {
-	labels := []string{"Cluster", "Account", "User", "Partition", "Share", "Priority", "GrpJobs", "GrpTRES", "GrpSubmit", "GrpWall", "GrpTRESMins", "MaxJobs", "MaxTRES", "MaxTRESPerNode", "MaxSubmit", "MaxWall", "MaxTRESMins", "QOS", "Def_QOS", "GrpTRESRunMin"}
-	new_labels := []string{"Name", "Priority", "GraceTime", "Preempt", "PreemptExemptTime", "PreemptMode", "Flags", "UsageThres", "UsageFactor", "GrpTRES", "GrpTRESMins", "GrpTRESRunMin", "GrpJobs", "GrpSubmit", "GrpWall", "MaxTRES", "MaxTRESPerNode", "MaxTRESMins", "MaxWall", "MaxTRESPU", "MaxJobsPU", "MaxSubmitPU", "MaxTRESPA", "MaxJobsPA", "MaxSubmitPA", "MinTRES"}
+	acc_labels := []string{"Cluster", "Account", "User", "Partition", "Share", "Priority", "GrpJobs", "GrpTRES", "GrpSubmit", "GrpWall", "GrpTRESMins", "MaxJobs", "MaxTRES", "MaxTRESPerNode", "MaxSubmit", "MaxWall", "MaxTRESMins", "QOS", "Def_QOS", "GrpTRESRunMin"}
+	qos_labels := []string{"Name", "Priority", "GraceTime", "Preempt", "PreemptExemptTime", "PreemptMode", "Flags", "UsageThres", "UsageFactor", "GrpTRES", "GrpTRESMins", "GrpTRESRunMin", "GrpJobs", "GrpSubmit", "GrpWall", "MaxTRES", "MaxTRESPerNode", "MaxTRESMins", "MaxWall", "MaxTRESPU", "MaxJobsPU", "MaxSubmitPU", "MaxTRESPA", "MaxJobsPA", "MaxSubmitPA", "MinTRES"}
 	return &AcctCollector{
-		assoc: prometheus.NewDesc("slurm_sacct_assoc", "Info about slurm accounts", labels, nil),
-		qos:   prometheus.NewDesc("slurm_sacct_qos", "Info about qos", new_labels, nil),
+		assoc: prometheus.NewDesc("slurm_sacct_assoc", "Info about slurm accounts", acc_labels, nil),
+		qos:   prometheus.NewDesc("slurm_sacct_qos", "Info about qos", qos_labels, nil),
 	}
 }
 

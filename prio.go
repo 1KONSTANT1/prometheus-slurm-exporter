@@ -211,21 +211,21 @@ type PrioCollector struct {
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewPrioCollector() *PrioCollector {
-	labels := []string{"JOBID", "PRIORITY", "AGE_FACT", "ASSOC_FACT", "PARTITION_FACT", "JOBSIZE_FACT", "QOS", "NICE_FACT", "ACCOUNT", "QOS_FACT", "PARTITION", "TRES_FACT", "USER"}
-	labels2 := []string{"JOBID", "PARTITION"}
+	prio_labels := []string{"JOBID", "PRIORITY", "AGE_FACT", "ASSOC_FACT", "PARTITION_FACT", "JOBSIZE_FACT", "QOS", "NICE_FACT", "ACCOUNT", "QOS_FACT", "PARTITION", "TRES_FACT", "USER"}
+	factor_labels := []string{"JOBID", "PARTITION"}
 
 	conf_labels := []string{"PriorityParameters", "PrioritySiteFactorParameters", "PrioritySiteFactorPlugin", "PriorityDecayHalfLife", "PriorityCalcPeriod", "PriorityFavorSmall", "PriorityFlags", "PriorityMaxAge", "PriorityUsageResetPeriod", "PriorityType", "PriorityWeightAge", "PriorityWeightAssoc", "PriorityWeightFairShare", "PriorityWeightJobSize", "PriorityWeightPartition", "PriorityWeightQOS", "PriorityWeightTRES"}
 
 	return &PrioCollector{
-		prio: prometheus.NewDesc("slurm_prio", "JOB's priority", labels, nil),
+		prio: prometheus.NewDesc("slurm_prio", "JOB's priority", prio_labels, nil),
 
-		prioconf:             prometheus.NewDesc("slurm_prio_conf", "SLurm Priority Configuration", conf_labels, nil),
-		job_age_factor:       prometheus.NewDesc("slurm_age_factor", "SLurm Priority Configuration", labels2, nil),
-		job_assoc_factor:     prometheus.NewDesc("slurm_assoc_factor", "SLurm Priority Configuration", labels2, nil),
-		job_jobsize_factor:   prometheus.NewDesc("slurm_jobsize_factor", "SLurm Priority Configuration", labels2, nil),
-		job_nice_factor:      prometheus.NewDesc("slurm_nice_factor", "SLurm Priority Configuration", labels2, nil),
-		job_partition_factor: prometheus.NewDesc("slurm_partition_factor", "SLurm Priority Configuration", labels2, nil),
-		job_qos_factor:       prometheus.NewDesc("slurm_qos_factor", "SLurm Priority Configuration", labels2, nil),
+		prioconf:             prometheus.NewDesc("slurm_prio_conf", "Slurm Priority Configuration", conf_labels, nil),
+		job_age_factor:       prometheus.NewDesc("slurm_age_factor", "Slurm age factor", factor_labels, nil),
+		job_assoc_factor:     prometheus.NewDesc("slurm_assoc_factor", "Slurm assoc factor", factor_labels, nil),
+		job_jobsize_factor:   prometheus.NewDesc("slurm_jobsize_factor", "Slurm jobsize factor", factor_labels, nil),
+		job_nice_factor:      prometheus.NewDesc("slurm_nice_factor", "Slurm nice factor", factor_labels, nil),
+		job_partition_factor: prometheus.NewDesc("slurm_partition_factor", "Slurm partition factor", factor_labels, nil),
+		job_qos_factor:       prometheus.NewDesc("slurm_qos_factor", "Slurm qos factor", factor_labels, nil),
 	}
 
 }
