@@ -157,35 +157,26 @@ func parseSlurmOutput(slurmStr string, node_name string) (float64, float64) {
 	// Разбиваем строку по пробелам
 	parts := strings.Fields(slurmStr)
 
-	flag := false
-
 	res_cpu := 0.0
 	res_mem := 0.0
 
-	for _, part := range parts {
+	for i, part := range parts {
 		if strings.HasPrefix(part, "Nodes=") && strings.Contains(part, node_name) {
-			flag = true
-		}
-
-		if flag {
-			if strings.HasPrefix(part, "CPU_IDs=") {
-				cpuIDs := strings.TrimPrefix(part, "CPU_IDs=")
-				for _, cpu_range := range strings.Split(cpuIDs, ",") {
-					if strings.Contains(cpu_range, "-") {
-						sum := strings.Split(cpu_range, "-")
-						ch1, _ := strconv.ParseFloat(sum[0], 64)
-						ch2, _ := strconv.ParseFloat(sum[1], 64)
-						res_cpu = res_cpu + (ch2 - ch1 + 1)
-					} else {
-						res_cpu = res_cpu + 1
-					}
+			cpuIDs := strings.TrimPrefix(parts[i+1], "CPU_IDs=")
+			for _, cpu_range := range strings.Split(cpuIDs, ",") {
+				if strings.Contains(cpu_range, "-") {
+					sum := strings.Split(cpu_range, "-")
+					ch1, _ := strconv.ParseFloat(sum[0], 64)
+					ch2, _ := strconv.ParseFloat(sum[1], 64)
+					res_cpu = res_cpu + (ch2 - ch1 + 1)
+				} else {
+					res_cpu = res_cpu + 1
 				}
-
-			} else if strings.HasPrefix(part, "Mem=") {
-				memStr := strings.TrimPrefix(part, "Mem=")
-				res_mem, _ = strconv.ParseFloat(memStr, 64)
-				break
 			}
+
+			memStr := strings.TrimPrefix(parts[i+2], "Mem=")
+			res_mem, _ = strconv.ParseFloat(memStr, 64)
+			break
 		}
 	}
 
