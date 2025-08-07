@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -65,18 +64,17 @@ func FindProcessByPID(nvidiaSMIOutput string, pid string) (*ProcessNvidia, error
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Находим начало секции процессов
+		// Find start of the process section
 		if processHeaderRegex.MatchString(line) {
 			inProcessSection = true
 			continue
 		}
 
-		// Пропускаем разделители
 		if strings.HasPrefix(line, "===") || strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		// Парсим данные процессов
+		// Parse process data
 		if inProcessSection {
 			matches := processDataRegex.FindStringSubmatch(line)
 			if len(matches) == 4 && matches[2] == pid {
@@ -124,7 +122,6 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 		GpusMap[gpu_uuid].hostname = hostname
 	}
 
-	//pidJobMap := make(map[string][]string)
 	nvidia_pid := make(map[string]*GPUusage)
 	nvidia_lines := strings.Split(string(Nvidiamon()), "\n")
 	pids_lines, err := ShowPids()
@@ -173,11 +170,10 @@ func Nvidiamon() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing nvidia-smi pmon command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing nvidia-smi pmon command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -188,11 +184,10 @@ func NvidiSMI() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing nvidia-smi command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing nvidia-smi command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -203,11 +198,10 @@ func Nvidiaquery() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing nvidia-smi --query-gpu command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing nvidia-smi --query-gpu command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }

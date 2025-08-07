@@ -36,23 +36,21 @@ func DiskGetMetrics() (map[string]*DiskMetrics, map[string]*Jobio) {
 }
 
 func readProcIO(pid string) string {
-	// Формируем путь к файлу /proc/{{pid}}/io
+	// Make path to /proc/{{pid}}/io
 	procIOPath := fmt.Sprintf("/proc/%s/io", pid)
 
-	// Читаем содержимое файла
+	// Read file data
 	data, err := ioutil.ReadFile(procIOPath)
 	if err != nil {
 		if _, err := os.Stat(procIOPath); os.IsNotExist(err) {
-			//log.Printf("No such PID directory: /proc/%s", pid)
 			return "rchar: 0\nwchar: 0"
 		} else if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				log.Printf("Error reading from %s pid: %v, stderr: %s", pid, err, exitErr.Stderr)
-				os.Exit(1)
 			} else {
 				log.Printf("Error reading from %s pid: %v", pid, err)
-				os.Exit(1)
 			}
+			return ""
 		}
 	}
 
@@ -128,13 +126,13 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 			split := strings.Fields(line)
 			pid_io_lines := strings.Split(readProcIO(split[0]), "\n")
 			if _, exists := jobs_io[split[1]]; !exists {
-				// Если ключа нет, создаем новый элемент
+				// If no key, make new value
 				jobs_io[split[1]] = &Jobio{}
 				jobs_io[split[1]].read, _ = strconv.ParseFloat(strings.Split(pid_io_lines[0], " ")[1], 64)
 				jobs_io[split[1]].write, _ = strconv.ParseFloat(strings.Split(pid_io_lines[1], " ")[1], 64)
 				jobs_io[split[1]].hostname = hostname
 			} else {
-				// Если ключ уже существует, суммируем значения
+				// If key exists, add to it
 				read_sum, _ := strconv.ParseFloat(strings.Split(pid_io_lines[0], " ")[1], 64)
 				jobs_io[split[1]].read = jobs_io[split[1]].read + read_sum
 				write_sum, _ := strconv.ParseFloat(strings.Split(pid_io_lines[1], " ")[1], 64)
@@ -155,11 +153,10 @@ func DiskData() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing lsblk command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing lsblk command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -50,18 +49,18 @@ type CompletedJobsMetrics struct {
 	alloc_tres string
 }
 
-func ShiftTimeBack(inputTime string) (string, error) {
+func ShiftTimeBack(inputTime string) string {
 	t, err := time.Parse("2006-01-02T15:04:05", inputTime)
 	if err != nil {
 		log.Printf("Error parsing time in ShiftTimeBack: %v", err)
-		os.Exit(1)
+		return inputTime
 	}
 
-	// Отнимаем 3 часа
+	// minus 3 hours
 	shiftedTime := t.Add(-3 * time.Hour)
 
-	// Форматируем результат обратно в строку
-	return shiftedTime.Format("2006-01-02T15:04:05"), nil
+	// Format back to string
+	return shiftedTime.Format("2006-01-02T15:04:05")
 }
 
 func JobGetMetrics() (map[string]*JobsMetrics, map[string]*CompletedJobsMetrics) {
@@ -135,10 +134,10 @@ func ParseJobMetrics(input []byte) (map[string]*JobsMetrics, map[string]*Complet
 			completed_jobs[jobid].qos = split[10]
 			completed_jobs[jobid].alloc_tres = split[11]
 			if completed_jobs[jobid].start != "None" && completed_jobs[jobid].start != "Unknown" {
-				completed_jobs[jobid].new_start, _ = ShiftTimeBack(completed_jobs[jobid].start)
+				completed_jobs[jobid].new_start = ShiftTimeBack(completed_jobs[jobid].start)
 			}
 			if completed_jobs[jobid].end != "None" && completed_jobs[jobid].end != "Unknown" {
-				completed_jobs[jobid].new_end, _ = ShiftTimeBack(completed_jobs[jobid].end)
+				completed_jobs[jobid].new_end = ShiftTimeBack(completed_jobs[jobid].end)
 			}
 
 		}
@@ -153,11 +152,10 @@ func JobData() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing squeue command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing squeue command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -171,12 +169,11 @@ func CompletedJobData() []byte {
 				return []byte{}
 			} else {
 				log.Printf("Error executing sacct command: %v, stderr: %s", err, exitErr.Stderr)
-				os.Exit(1)
 			}
 		} else {
 			log.Printf("Error executing sacct command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }

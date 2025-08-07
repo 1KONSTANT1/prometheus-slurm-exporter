@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -114,22 +113,20 @@ func NodeResData() ([]byte, []byte) {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing scontrol show nodes command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing scontrol show nodes command: %v", err)
-			os.Exit(1)
 		}
+		out = []byte("")
 	}
 	cmd2 := exec.Command("cat", "/etc/hosts")
 	out2, err := cmd2.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing cat /etc/hosts command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing cat /etc/hosts command: %v", err)
-			os.Exit(1)
 		}
+		out2 = []byte("")
 	}
 	return out, out2
 }

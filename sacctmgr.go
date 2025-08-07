@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -15,11 +14,10 @@ func NewAcctData() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing sacctmgr assoc command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing sacctmgr assoc command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -30,11 +28,10 @@ func GetQOSData() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing sacctmgr qos command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing sacctmgr qos command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }

@@ -61,16 +61,14 @@ func pscommand(pid string) []byte {
 	out, err := cmd.Output()
 	if err != nil {
 		if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
-			//log.Printf("No such PID directory: /proc/%s", pid)
 			return []byte("0.0 0.0 0.0 0.0")
 		} else if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				log.Printf("Error executing ps -p %s command: %v, stderr: %s", pid, err, exitErr.Stderr)
-				os.Exit(1)
 			} else {
 				log.Printf("Error executing ps -p %s command: %v", pid, err)
-				os.Exit(1)
 			}
+			return []byte("")
 		}
 	}
 
@@ -88,16 +86,14 @@ func get_swap(pid string) []byte {
 	out, err := cmd.Output()
 	if err != nil {
 		if _, err := os.Stat("/proc/" + pid); os.IsNotExist(err) {
-			//log.Printf("No such PID directory: /proc/%s", pid)
 			return []byte("VmSwap: 0 kB")
 		} else if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				log.Printf("Error executing cat /proc/%s command: %v, stderr: %s", pid, err, exitErr.Stderr)
-				os.Exit(1)
 			} else {
 				log.Printf("Error executing cat /proc/%s command: %v", pid, err)
-				os.Exit(1)
 			}
+			return []byte("")
 		}
 	}
 
@@ -114,7 +110,9 @@ func get_sontrol_job(job string) []byte {
 
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error executing scontrol show job command")
+		return []byte("")
+
 	}
 	return out
 }
@@ -176,7 +174,7 @@ func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*jobpcpuram, *RAMmetrics) {
 		for _, line := range lines {
 			split := strings.Fields(line)
 			if _, exists := job_cpu_pids[split[1]]; !exists {
-				// Если ключа нет, создаем новый элемент
+				// If no key, make new value
 				job_cpu_pids[split[1]] = &jobpcpuram{}
 				out_line := string(pscommand(split[0]))
 				job_cpu_pids[split[1]].cpu_usage, _ = strconv.ParseFloat(strings.Fields(out_line)[0], 64)
@@ -188,7 +186,7 @@ func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*jobpcpuram, *RAMmetrics) {
 				job_cpu_pids[split[1]].swap_usage, _ = strconv.ParseFloat(strings.Fields(swap_line)[1], 64)
 				job_cpu_pids[split[1]].cpu_count, job_cpu_pids[split[1]].mem_count = parseSlurmOutput(string(get_sontrol_job(split[1])), hostname)
 			} else {
-				// Если ключ уже существует, суммируем значения
+				// If key exists, add to it
 				out_line := string(pscommand(split[0]))
 				cp_us, _ := strconv.ParseFloat(strings.Fields(out_line)[0], 64)
 				job_cpu_pids[split[1]].cpu_usage += cp_us
@@ -230,11 +228,10 @@ func CPUquery() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing lscpu command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing lscpu command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -245,11 +242,10 @@ func RAMquery() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing free command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing free command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -287,12 +283,7 @@ func NewCPUsCollector() *CPUsCollector {
 }
 
 type CPUsCollector struct {
-	alloc                    *prometheus.Desc
-	idle                     *prometheus.Desc
-	other                    *prometheus.Desc
-	total                    *prometheus.Desc
 	cpu_info                 *prometheus.Desc
-	top_cpu_usage            *prometheus.Desc
 	job_cpu_usage            *prometheus.Desc
 	job_cpu_usage_normalized *prometheus.Desc
 	job_mem_usage_normalized *prometheus.Desc
@@ -302,7 +293,6 @@ type CPUsCollector struct {
 	job_rss                  *prometheus.Desc
 	job_vsz                  *prometheus.Desc
 	job_swap                 *prometheus.Desc
-	top_mem_usage            *prometheus.Desc
 	total_ram                *prometheus.Desc
 	used_ram                 *prometheus.Desc
 	free_ram                 *prometheus.Desc
@@ -316,18 +306,12 @@ type CPUsCollector struct {
 
 // Send all metric descriptions
 func (cc *CPUsCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- cc.alloc
-	ch <- cc.idle
-	ch <- cc.other
-	ch <- cc.total
 	ch <- cc.cpu_info
-	ch <- cc.top_cpu_usage
 	ch <- cc.job_cpu_usage
 	ch <- cc.job_mem_usage
 	ch <- cc.job_rss
 	ch <- cc.job_vsz
 	ch <- cc.job_swap
-	ch <- cc.top_mem_usage
 	ch <- cc.total_ram
 	ch <- cc.used_ram
 	ch <- cc.free_ram

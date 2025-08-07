@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 	"os/exec"
 )
 
@@ -18,26 +17,22 @@ func GetHostName() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing hostname command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing hostname command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
 
 func RemoveDuplicates(s []string) []string {
-	m := map[string]bool{}
+	m := make(map[string]struct{})
 	t := []string{}
 
-	// Walk through the slice 's' and for each value we haven't seen so far, append it to 't'.
 	for _, v := range s {
-		if _, seen := m[v]; !seen {
-			if len(v) > 0 {
-				t = append(t, v)
-				m[v] = true
-			}
+		if _, seen := m[v]; !seen && v != "" {
+			t = append(t, v)
+			m[v] = struct{}{}
 		}
 	}
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -15,11 +14,10 @@ func NewPartitionsData() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing sinfo partition command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing sinfo partition command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -30,11 +28,10 @@ func GetDefaultData() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing scontrol show partition command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing scontrol show partition command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
 }
@@ -56,7 +53,6 @@ func ParsePartitionsMetrics() map[string]*NewPartitionMetrics {
 	partitions_info := make(map[string]*NewPartitionMetrics)
 	lines := strings.Split(string(NewPartitionsData()), "\n")
 	partition_scontrol := string(GetDefaultData())
-	flag := false
 	for _, line := range lines {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")
@@ -71,28 +67,24 @@ func ParsePartitionsMetrics() map[string]*NewPartitionMetrics {
 			partitions_info[partition_name].nodelist = split[6]
 			partitions_info[partition_name].node_states = split[7]
 			partitions_info[partition_name].reason = split[8][:len(split[8])-1]
-			flag = false
-			for _, scontrol_line := range strings.Split(partition_scontrol, "\n") {
-				for _, word := range strings.Fields(scontrol_line) {
-					if strings.HasPrefix(word, "PartitionName") {
-						if strings.Split(word, "=")[1] != partition_name {
-							break
-						}
-
-					}
-					if strings.HasPrefix(word, "PriorityJobFactor") {
-						partitions_info[partition_name].priority_job_factor = strings.Split(word, "=")[1]
-
-					}
-					if strings.HasPrefix(word, "PriorityTier") {
-						partitions_info[partition_name].priority_tier = strings.Split(word, "=")[1]
-						flag = true
-						break
-					}
-				}
-				if flag {
+		}
+	}
+	current_partition := ""
+	for _, scontrol_line := range strings.Split(partition_scontrol, "\n") {
+		for _, word := range strings.Fields(scontrol_line) {
+			if strings.HasPrefix(word, "PartitionName") {
+				current_partition = strings.Split(word, "=")[1]
+				if _, exists := partitions_info[current_partition]; !exists {
 					break
 				}
+				continue
+			}
+			if strings.HasPrefix(word, "PriorityJobFactor") {
+				partitions_info[current_partition].priority_job_factor = strings.Split(word, "=")[1]
+			}
+			if strings.HasPrefix(word, "PriorityTier") {
+				partitions_info[current_partition].priority_tier = strings.Split(word, "=")[1]
+				break
 			}
 		}
 	}
