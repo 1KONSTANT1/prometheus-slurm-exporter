@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -114,48 +113,46 @@ func NodeResData() ([]byte, []byte) {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing scontrol show nodes command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing scontrol show nodes command: %v", err)
-			os.Exit(1)
 		}
+		out = []byte("")
 	}
 	cmd2 := exec.Command("cat", "/etc/hosts")
 	out2, err := cmd2.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing cat /etc/hosts command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing cat /etc/hosts command: %v", err)
-			os.Exit(1)
 		}
+		out2 = []byte("")
 	}
 	return out, out2
 }
 
 type NodeResCollector struct {
-	time *prometheus.Desc
+	node_res *prometheus.Desc
 }
 
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewNodeResCollector() *NodeResCollector {
-	labels := []string{"NODE_NAME", "CPUAlloc", "CPUTot", "CPULoad", "RealMemory", "AllocMem", "FreeMem", "STATE", "PARTITIONS", "LastBusyTime", "BootTime", "SlurmdStartTime", "Reason", "IP"}
+	node_res_labels := []string{"NODE_NAME", "CPUAlloc", "CPUTot", "CPULoad", "RealMemory", "AllocMem", "FreeMem", "STATE", "PARTITIONS", "LastBusyTime", "BootTime", "SlurmdStartTime", "Reason", "IP"}
 
 	return &NodeResCollector{
-		time: prometheus.NewDesc("slurm_node_resources", "NODE RESOURCES", labels, nil),
+		node_res: prometheus.NewDesc("slurm_node_resources", "NODE RESOURCES", node_res_labels, nil),
 	}
 }
 
 // Send all metric descriptions
 func (nc *NodeResCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- nc.time
+	ch <- nc.node_res
 }
 
 func (nc *NodeResCollector) Collect(ch chan<- prometheus.Metric) {
 	nodes := NodeResGetMetrics()
 	for node := range nodes {
-		ch <- prometheus.MustNewConstMetric(nc.time, prometheus.GaugeValue, float64(0), node, nodes[node].cpu_alloc, nodes[node].cpu_total, nodes[node].cpu_load, nodes[node].real_mem, nodes[node].alloc_mem, nodes[node].free_mem, nodes[node].state, nodes[node].partitions, nodes[node].last_busy_time, nodes[node].boot_time, nodes[node].slurmd_start_time, nodes[node].reason, nodes[node].ip)
+		ch <- prometheus.MustNewConstMetric(nc.node_res, prometheus.GaugeValue, float64(0), node, nodes[node].cpu_alloc, nodes[node].cpu_total, nodes[node].cpu_load, nodes[node].real_mem, nodes[node].alloc_mem, nodes[node].free_mem, nodes[node].state, nodes[node].partitions, nodes[node].last_busy_time, nodes[node].boot_time, nodes[node].slurmd_start_time, nodes[node].reason, nodes[node].ip)
 	}
 }

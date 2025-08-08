@@ -36,23 +36,21 @@ func DiskGetMetrics() (map[string]*DiskMetrics, map[string]*Jobio) {
 }
 
 func readProcIO(pid string) string {
-	// Формируем путь к файлу /proc/{{pid}}/io
+	// Make path to /proc/{{pid}}/io
 	procIOPath := fmt.Sprintf("/proc/%s/io", pid)
 
-	// Читаем содержимое файла
+	// Read file data
 	data, err := ioutil.ReadFile(procIOPath)
 	if err != nil {
 		if _, err := os.Stat(procIOPath); os.IsNotExist(err) {
-			//log.Printf("No such PID directory: /proc/%s", pid)
 			return "rchar: 0\nwchar: 0"
 		} else if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				log.Printf("Error reading from %s pid: %v, stderr: %s", pid, err, exitErr.Stderr)
-				os.Exit(1)
 			} else {
 				log.Printf("Error reading from %s pid: %v", pid, err)
-				os.Exit(1)
 			}
+			return ""
 		}
 	}
 
@@ -128,13 +126,13 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 			split := strings.Fields(line)
 			pid_io_lines := strings.Split(readProcIO(split[0]), "\n")
 			if _, exists := jobs_io[split[1]]; !exists {
-				// Если ключа нет, создаем новый элемент
+				// If no key, make new value
 				jobs_io[split[1]] = &Jobio{}
 				jobs_io[split[1]].read, _ = strconv.ParseFloat(strings.Split(pid_io_lines[0], " ")[1], 64)
 				jobs_io[split[1]].write, _ = strconv.ParseFloat(strings.Split(pid_io_lines[1], " ")[1], 64)
 				jobs_io[split[1]].hostname = hostname
 			} else {
-				// Если ключ уже существует, суммируем значения
+				// If key exists, add to it
 				read_sum, _ := strconv.ParseFloat(strings.Split(pid_io_lines[0], " ")[1], 64)
 				jobs_io[split[1]].read = jobs_io[split[1]].read + read_sum
 				write_sum, _ := strconv.ParseFloat(strings.Split(pid_io_lines[1], " ")[1], 64)
@@ -155,33 +153,12 @@ func DiskData() []byte {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Printf("Error executing lsblk command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
 		} else {
 			log.Printf("Error executing lsblk command: %v", err)
-			os.Exit(1)
 		}
+		return []byte("")
 	}
 	return out
-}
-func GetHostName() []byte {
-	cmd := exec.Command("hostname")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing hostname command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
-		} else {
-			log.Printf("Error executing hostname command: %v", err)
-			os.Exit(1)
-		}
-	}
-	return out
-}
-
-func ShowPids() ([]byte, error) {
-	cmd := exec.Command("scontrol", "listpids")
-	out, err := cmd.Output()
-	return out, err
 }
 
 type DiskCollector struct {
@@ -196,15 +173,15 @@ type DiskCollector struct {
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
 // It returns a set of collections for consumption
 func NewDiskCollector() *DiskCollector {
-	labels := []string{"DISK", "HOSTNAME", "TYPE", "PARENT", "DISK_TOTAL", "MOUNTPOINTS"}
-	labels2 := []string{"JOBID", "HOSTNAME"}
+	disk_labels := []string{"DISK", "HOSTNAME", "TYPE", "PARENT", "DISK_TOTAL", "MOUNTPOINTS"}
+	job_disk_labels := []string{"JOBID", "HOSTNAME"}
 	return &DiskCollector{
-		disk_fsize:      prometheus.NewDesc("slurm_disk_filesystemsize", "DISK INFOf", labels, nil),
-		disk_size_avail: prometheus.NewDesc("slurm_disk_size_avail", "DISK INFOd", labels, nil),
-		disk_size_used:  prometheus.NewDesc("slurm_disk_size_used", "DISK INFOs", labels, nil),
-		disk_size:       prometheus.NewDesc("slurm_disk_size", "DISK INFOf", labels, nil),
-		jobs_read_disk:  prometheus.NewDesc("slurm_disk_jobs_read", "DISK INFOf", labels2, nil),
-		jobs_write_disk: prometheus.NewDesc("slurm_disk_jobs_write", "DISK INFOf", labels2, nil),
+		disk_fsize:      prometheus.NewDesc("slurm_disk_filesystemsize", "DISK fsize", disk_labels, nil),
+		disk_size_avail: prometheus.NewDesc("slurm_disk_size_avail", "DISK size avail", disk_labels, nil),
+		disk_size_used:  prometheus.NewDesc("slurm_disk_size_used", "DISK size used", disk_labels, nil),
+		disk_size:       prometheus.NewDesc("slurm_disk_size", "DISK size", disk_labels, nil),
+		jobs_read_disk:  prometheus.NewDesc("slurm_disk_jobs_read", "SLURM JOBS READ FROM DISK", job_disk_labels, nil),
+		jobs_write_disk: prometheus.NewDesc("slurm_disk_jobs_write", "SLURM JOBS WRITE TO DISK", job_disk_labels, nil),
 	}
 }
 
