@@ -25,13 +25,19 @@ type DiskMetrics struct {
 	mountpoints string
 }
 
+type DiskStats struct {
+	R_IOPS   float64
+	W_IOPS   float64
+	hostname string
+}
+
 type Jobio struct {
 	read     float64
 	write    float64
 	hostname string
 }
 
-func DiskGetMetrics() (map[string]*DiskMetrics, map[string]*Jobio) {
+func DiskGetMetrics() (map[string]*DiskMetrics, map[string]*Jobio, map[string]*DiskStats) {
 	return ParseDiskMetrics(DiskData())
 }
 
@@ -59,7 +65,7 @@ func readProcIO(pid string) string {
 
 // ParseNodeMetrics takes the output of sinfo with node data
 // It returns a map of metrics per node
-func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio) {
+func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio, map[string]*DiskStats) {
 	disk_info := make(map[string]*DiskMetrics)
 	hostname := string(GetHostName())
 	hostname = strings.ReplaceAll(hostname, "\n", "")
@@ -142,7 +148,25 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio)
 		}
 	}
 
-	return disk_info, jobs_io
+	disk_ops := make(map[string]*DiskStats)
+	lines = strings.Split(string(DiskIops()), "\n")
+	lines = lines[3 : len(lines)-1]
+	lines = RemoveDuplicates(lines)
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		disk_ops[fields[0]] = &DiskStats{}
+		disk_ops[fields[0]].hostname = hostname
+		disk_ops[fields[0]].R_IOPS, err = strconv.ParseFloat(fields[1], 64)
+		if err != nil {
+			log.Printf("Error parsing  r/s for %s device: %v", fields[0], err)
+		}
+		disk_ops[fields[0]].W_IOPS, err = strconv.ParseFloat(fields[6], 64)
+		if err != nil {
+			log.Printf("Error parsing  w/s for %s device: %v", fields[0], err)
+		}
+	}
+
+	return disk_info, jobs_io, disk_ops
 }
 
 // NodeData executes the sinfo command to get data for each node
@@ -161,6 +185,20 @@ func DiskData() []byte {
 	return out
 }
 
+func DiskIops() []byte {
+	cmd := exec.Command("/bin/sh", "-c", "iostat -dx 1 1")
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			log.Printf("Error executing iostat command: %v, stderr: %s", err, exitErr.Stderr)
+		} else {
+			log.Printf("Error executing iostat command: %v", err)
+		}
+		return []byte("")
+	}
+	return out
+}
+
 type DiskCollector struct {
 	disk_fsize      *prometheus.Desc
 	disk_size_avail *prometheus.Desc
@@ -168,6 +206,8 @@ type DiskCollector struct {
 	disk_size       *prometheus.Desc
 	jobs_read_disk  *prometheus.Desc
 	jobs_write_disk *prometheus.Desc
+	disk_write_iops *prometheus.Desc
+	disk_read_iops  *prometheus.Desc
 }
 
 // NewNodeCollector creates a Prometheus collector to keep all our stats in
@@ -175,6 +215,7 @@ type DiskCollector struct {
 func NewDiskCollector() *DiskCollector {
 	disk_labels := []string{"DISK", "HOSTNAME", "TYPE", "PARENT", "DISK_TOTAL", "MOUNTPOINTS"}
 	job_disk_labels := []string{"JOBID", "HOSTNAME"}
+	iops_disk_labels := []string{"DISK", "HOSTNAME"}
 	return &DiskCollector{
 		disk_fsize:      prometheus.NewDesc("slurm_disk_filesystemsize", "DISK fsize", disk_labels, nil),
 		disk_size_avail: prometheus.NewDesc("slurm_disk_size_avail", "DISK size avail", disk_labels, nil),
@@ -182,6 +223,8 @@ func NewDiskCollector() *DiskCollector {
 		disk_size:       prometheus.NewDesc("slurm_disk_size", "DISK size", disk_labels, nil),
 		jobs_read_disk:  prometheus.NewDesc("slurm_disk_jobs_read", "SLURM JOBS READ FROM DISK", job_disk_labels, nil),
 		jobs_write_disk: prometheus.NewDesc("slurm_disk_jobs_write", "SLURM JOBS WRITE TO DISK", job_disk_labels, nil),
+		disk_write_iops: prometheus.NewDesc("slurm_disk_write_iops", "DiSK write iops", iops_disk_labels, nil),
+		disk_read_iops:  prometheus.NewDesc("slurm_disk_read_iops", "DiSK read iops", iops_disk_labels, nil),
 	}
 }
 
@@ -193,10 +236,12 @@ func (nc *DiskCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- nc.disk_size
 	ch <- nc.jobs_read_disk
 	ch <- nc.jobs_write_disk
+	ch <- nc.disk_write_iops
+	ch <- nc.disk_read_iops
 }
 
 func (nc *DiskCollector) Collect(ch chan<- prometheus.Metric) {
-	disks, jobs_io := DiskGetMetrics()
+	disks, jobs_io, iops_disk := DiskGetMetrics()
 	for disk := range disks {
 		ch <- prometheus.MustNewConstMetric(nc.disk_fsize, prometheus.GaugeValue, disks[disk].fsize, disk, disks[disk].hostname, disks[disk].device_type, disks[disk].parent_name, disks[disk].disk_total, disks[disk].mountpoints)
 		ch <- prometheus.MustNewConstMetric(nc.disk_size, prometheus.GaugeValue, disks[disk].size, disk, disks[disk].hostname, disks[disk].device_type, disks[disk].parent_name, disks[disk].disk_total, disks[disk].mountpoints)
@@ -206,5 +251,9 @@ func (nc *DiskCollector) Collect(ch chan<- prometheus.Metric) {
 	for job := range jobs_io {
 		ch <- prometheus.MustNewConstMetric(nc.jobs_read_disk, prometheus.GaugeValue, jobs_io[job].read, job, jobs_io[job].hostname)
 		ch <- prometheus.MustNewConstMetric(nc.jobs_write_disk, prometheus.GaugeValue, jobs_io[job].write, job, jobs_io[job].hostname)
+	}
+	for disk := range iops_disk {
+		ch <- prometheus.MustNewConstMetric(nc.disk_write_iops, prometheus.GaugeValue, iops_disk[disk].W_IOPS, disk, iops_disk[disk].hostname)
+		ch <- prometheus.MustNewConstMetric(nc.disk_read_iops, prometheus.GaugeValue, iops_disk[disk].R_IOPS, disk, iops_disk[disk].hostname)
 	}
 }
