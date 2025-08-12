@@ -149,20 +149,20 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio,
 	}
 
 	disk_ops := make(map[string]*DiskStats)
-	lines = strings.Split(string(DiskIops()), "\n")
-	lines = lines[3 : len(lines)-1]
+	lines = strings.Split(GetDiskstatsAsString(), "\n")
+	//lines = lines[3 : len(lines)-1]
 	lines = RemoveDuplicates(lines)
 	for _, line := range lines {
 		fields := strings.Fields(line)
-		disk_ops[fields[0]] = &DiskStats{}
-		disk_ops[fields[0]].hostname = hostname
-		disk_ops[fields[0]].R_IOPS, err = strconv.ParseFloat(fields[1], 64)
+		disk_ops[fields[2]] = &DiskStats{}
+		disk_ops[fields[2]].hostname = hostname
+		disk_ops[fields[2]].R_IOPS, err = strconv.ParseFloat(fields[3], 64)
 		if err != nil {
-			log.Printf("Error parsing  r/s for %s device: %v", fields[0], err)
+			log.Printf("Error parsing  r/s for %s device: %v", fields[2], err)
 		}
-		disk_ops[fields[0]].W_IOPS, err = strconv.ParseFloat(fields[6], 64)
+		disk_ops[fields[2]].W_IOPS, err = strconv.ParseFloat(fields[7], 64)
 		if err != nil {
-			log.Printf("Error parsing  w/s for %s device: %v", fields[0], err)
+			log.Printf("Error parsing  w/s for %s device: %v", fields[2], err)
 		}
 	}
 
@@ -185,18 +185,17 @@ func DiskData() []byte {
 	return out
 }
 
-func DiskIops() []byte {
-	cmd := exec.Command("/bin/sh", "-c", "iostat -dx 1 1")
-	out, err := cmd.Output()
+func GetDiskstatsAsString() string {
+	data, err := ioutil.ReadFile("/proc/diskstats")
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing iostat command: %v, stderr: %s", err, exitErr.Stderr)
+			log.Printf("Error opening /proc/diskstats file: %v, stderr: %s", err, exitErr.Stderr)
 		} else {
-			log.Printf("Error executing iostat command: %v", err)
+			log.Printf("Error opening /proc/diskstats file: %v", err)
 		}
-		return []byte("")
+		return ""
 	}
-	return out
+	return string(data)
 }
 
 type DiskCollector struct {
