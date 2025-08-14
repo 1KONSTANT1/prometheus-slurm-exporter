@@ -11,6 +11,7 @@ import (
 
 func init() {
 	// Metrics have to be registered to be exposed
+	prometheus.MustRegister(NewNetworkCollector())
 	prometheus.MustRegister(NewDiskCollector())
 	prometheus.MustRegister(NewAssocCollector())
 	prometheus.MustRegister(NewPrioCollector())
