@@ -267,6 +267,8 @@ func NewCPUsCollector() *CPUsCollector {
 		job_cpu_usage_normalized: prometheus.NewDesc("slurm_cpu_job_usage_normalized", "Total CPUs info", job_labels, nil),
 		job_mem_usage_normalized: prometheus.NewDesc("slurm_mem_job_usage_normalized", "Total CPUs info", job_labels, nil),
 		job_mem_usage:            prometheus.NewDesc("slurm_mem_job_usage", "Slurm job ram usage", job_labels, nil),
+		job_cpu_count:            prometheus.NewDesc("slurm_cpu_job_count", "Slurm job cpu count", job_labels, nil),
+		job_mem_count:            prometheus.NewDesc("slurm_mem_job_count", "SLURM job memory count", job_labels, nil),
 		job_rss:                  prometheus.NewDesc("slurm_mem_rss", "Slurm job rss usage", job_labels, nil),
 		job_vsz:                  prometheus.NewDesc("slurm_mem_vsz", "Slurm job vsz used", job_labels, nil),
 		job_swap:                 prometheus.NewDesc("slurm_mem_swap", "Slurm job swap used", job_labels, nil),
