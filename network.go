@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,15 +28,13 @@ type InterfaceStats struct {
 }
 
 func NetworkGetMetrics() map[string]*InterfaceStats {
-	return ParseNetworkMetrics(NetworkData())
+	return ParseNetworkMetrics(EXECUTE_COMMAND(SHOW_LINKS))
 }
 
 func ParseNetworkMetrics(input []byte) map[string]*InterfaceStats {
-	hostname := string(GetHostName())
+	hostname := string(EXECUTE_COMMAND(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
-	if strings.Contains(hostname, ".") {
-		hostname = strings.Split(hostname, ".")[0]
-	}
+
 	interfaces := make(map[string]*InterfaceStats, 5)
 	lines := strings.Split(string(input), "\n")
 
@@ -120,20 +116,6 @@ func ParseNetworkMetrics(input []byte) map[string]*InterfaceStats {
 	}
 
 	return interfaces
-}
-
-func NetworkData() []byte {
-	cmd := exec.Command("/bin/bash", "-c", "ip -s link")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing ip link command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing ip link command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
 }
 
 type NetworkCollector struct {

@@ -1,40 +1,10 @@
 package main
 
 import (
-	"log"
-	"os/exec"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
-
-func NewPartitionsData() []byte {
-	cmd := exec.Command("sinfo", "-h", "-o \"%R|%a|%D|%g|%G|%I|%N|%T|%E\"")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing sinfo partition command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing sinfo partition command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
-
-func GetDefaultData() []byte {
-	cmd := exec.Command("scontrol", "-o", "show", "partition")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing scontrol show partition command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing scontrol show partition command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
 
 type NewPartitionMetrics struct {
 	available           string
@@ -51,13 +21,12 @@ type NewPartitionMetrics struct {
 
 func ParsePartitionsMetrics() map[string]*NewPartitionMetrics {
 	partitions_info := make(map[string]*NewPartitionMetrics)
-	lines := strings.Split(string(NewPartitionsData()), "\n")
-	partition_scontrol := string(GetDefaultData())
+	lines := strings.Split(string(EXECUTE_COMMAND(SINFO_PARTITIONS)), "\n")
+	partition_scontrol := string(EXECUTE_COMMAND(SCONTROL_SHOW_PARTITION))
 	for _, line := range lines {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")
 			partition_name := split[0]
-			partition_name = partition_name[2:]
 			partitions_info[partition_name] = &NewPartitionMetrics{}
 			partitions_info[partition_name].available = split[1]
 			partitions_info[partition_name].node_count = split[2]

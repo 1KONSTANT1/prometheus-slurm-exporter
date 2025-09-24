@@ -3,9 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
-	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -157,7 +154,7 @@ func FindProcessByPID(nvidiaSMIOutput string, pid string) (*ProcessNvidia, error
 }
 
 func FindEntityID(gpu, gi, ci int) string {
-	scanner := bufio.NewScanner(strings.NewReader(string(discovery())))
+	scanner := bufio.NewScanner(strings.NewReader(string(EXECUTE_COMMAND(DCGMI_DISCOVERY))))
 
 	targetPattern := fmt.Sprintf("CI %d/%d/%d", gpu, gi, ci)
 
@@ -252,7 +249,7 @@ func ParseNvidiaSMI(output string) (map[string]*MIGDevice, error) {
 }
 
 func SetMigProfileInfo(migDevices map[string]*MIGDevice) error {
-	scanner := bufio.NewScanner(strings.NewReader(string(Nvidi_MIG_PROFILES())))
+	scanner := bufio.NewScanner(strings.NewReader(string(EXECUTE_COMMAND(NVIDIA_SMI_MIG_LGI))))
 
 	migInstanceRegex := regexp.MustCompile(`\|\s+(\d+)\s+MIG\s+([\w\.]+)\s+(\d+)\s+(\d+)\s+(\d+:\d+)\s+\|`)
 
@@ -301,7 +298,7 @@ func FindPIDMetrics(pid string, migDevices map[string]*MIGDevice) (string, strin
 func parseMIGProfiles() map[string]map[string]*MIGPROFILES {
 	result := make(map[string]map[string]*MIGPROFILES)
 
-	lines := strings.Split(string(MIG_LGIP()), "\n")
+	lines := strings.Split(string(EXECUTE_COMMAND(NVIDIA_SMI_MIG_LGIP)), "\n")
 
 	profileRegex := regexp.MustCompile(`^\|\s+(\d+)\s+MIG\s+[\w\.\+]+\s+(\d+)\s+\d+/\d+\s+([\d\.]+)\s+\w+\s+(\d+)`)
 
@@ -336,14 +333,12 @@ func parseMIGProfiles() map[string]map[string]*MIGPROFILES {
 }
 
 func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
-	hostname := string(GetHostName())
+	hostname := string(EXECUTE_COMMAND(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
-	if strings.Contains(hostname, ".") {
-		hostname = strings.Split(hostname, ".")[0]
-	}
+
 	migs := false
 
-	migDevices, err := ParseNvidiaSMI(string(NvidiSMI()))
+	migDevices, err := ParseNvidiaSMI(string(EXECUTE_COMMAND(NVIDIA_SMI)))
 
 	mig_totals := make(map[string]*MIGPROFILES)
 	if migDevices != nil {
@@ -367,7 +362,7 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 			dcgmi_dmon_comm = dcgmi_dmon_comm + fmt.Sprintf(",ci:%d", device.MigDev)
 		}
 		dcgmi_dmon_comm = dcgmi_dmon_comm + " -c 1"
-		mig_totals = ParseDcgmiDmon(string(DCGMIDMON(dcgmi_dmon_comm)), migDevices)
+		mig_totals = ParseDcgmiDmon(string(EXECUTE_COMMAND(dcgmi_dmon_comm)), migDevices)
 
 		SetMigProfileInfo(migDevices)
 
@@ -379,7 +374,8 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 	}
 
 	GpusMap := make(map[string]*GPUsMetrics)
-	lines := strings.Split(string(Nvidiaquery()), "\n")
+
+	lines := strings.Split(string(EXECUTE_COMMAND(NVDIA_QUERY)), "\n")
 	lines = lines[1 : len(lines)-1]
 	for _, line := range lines {
 		split := strings.Split(line, ",")
@@ -407,7 +403,7 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 	}
 
 	nvidia_pid := make(map[string]*GPUusage)
-	nvidia_lines := strings.Split(string(Nvidiamon()), "\n")
+	nvidia_lines := strings.Split(string(EXECUTE_COMMAND(NVIDIA_SMI_PMON)), "\n")
 	pids_lines, err := ShowPids()
 	if err == nil && len(nvidia_lines) > 2 {
 		slurm_pid_lines := strings.Split(string(pids_lines), "\n")
@@ -439,7 +435,7 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 					nvidia_pid[split[1]].gpu_usage = nvidia_pid[split[1]].gpu_usage + nvidia_sm
 					nvidia_pid[split[1]].hostname = hostname
 					nvidia_pid[split[1]].index = index
-					nvidia_proc_info, _ := FindProcessByPID(string(NvidiSMI()), split[0])
+					nvidia_proc_info, _ := FindProcessByPID(string(EXECUTE_COMMAND(NVIDIA_SMI)), split[0])
 					if nvidia_proc_info != nil {
 						nvidia_pid[split[1]].allocated_memory, err = strconv.ParseFloat(fmt.Sprintf("%.1f", nvidia_proc_info.MemoryMB/GpusMap[nvidia_proc_info.GPUID].memory_total*100), 64)
 						if err != nil {
@@ -461,107 +457,6 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 
 	return GpusMap, nvidia_pid
 
-}
-
-func Nvidiamon() []byte {
-	cmd := exec.Command("nvidia-smi", "pmon", "-c", "1")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing nvidia-smi pmon command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing nvidia-smi pmon command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
-
-func NvidiSMI() []byte {
-	cmd := exec.Command("nvidia-smi")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing nvidia-smi command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing nvidia-smi command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
-
-func discovery() []byte {
-	cmd := exec.Command("/bin/bash", "-c", "dcgmi discovery -c")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing dcgmi discovery command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing dcgmi discovery command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
-
-func Nvidi_MIG_PROFILES() []byte {
-	cmd := exec.Command("nvidia-smi", "mig", "-lgi")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing nvidia-smi mig lgi command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
-		} else {
-			log.Printf("Error executing nvidia-smi mig lgi command: %v", err)
-			os.Exit(1)
-		}
-	}
-	return out
-}
-
-func MIG_LGIP() []byte {
-	cmd := exec.Command("nvidia-smi", "mig", "-lgip")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing nvidia-smi mig lgip command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
-		} else {
-			log.Printf("Error executing nvidia-smi mig lgip command: %v", err)
-			os.Exit(1)
-		}
-	}
-	return out
-}
-
-func DCGMIDMON(comm string) []byte {
-	cmd := exec.Command("/bin/bash", "-c", comm)
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing dcgmi dmon command: %v, stderr: %s", err, exitErr.Stderr)
-			os.Exit(1)
-		} else {
-			log.Printf("Error executing dcgmi dmon command: %v", err)
-			os.Exit(1)
-		}
-	}
-	return out
-}
-
-func Nvidiaquery() []byte {
-	cmd := exec.Command("nvidia-smi", "--query-gpu=name,driver_version,vbios_version,pstate,memory.total,memory.used,utilization.gpu,utilization.memory,temperature.gpu,power.draw.instant,power.limit,uuid,index,mig.mode.current", "--format=csv")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing nvidia-smi --query-gpu command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing nvidia-smi --query-gpu command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
 }
 
 /*
