@@ -99,9 +99,7 @@ func ParseDcgmiDmon(output string, migDevices map[string]*MIGDevice) map[string]
 			total_gpus[matches[3]].SM = smact
 			total_gpus[matches[3]].MEM = drama
 		} else {
-			migDev, err := strconv.Atoi(matches[2])
-			if err != nil {
-			}
+			migDev, _ := strconv.Atoi(matches[2])
 			for _, device := range migDevices {
 				if device.MigDev == migDev {
 					device.InstanceUsage = smact
@@ -112,8 +110,6 @@ func ParseDcgmiDmon(output string, migDevices map[string]*MIGDevice) map[string]
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-	}
 	return total_gpus
 }
 
@@ -277,7 +273,7 @@ func SetMigProfileInfo(migDevices map[string]*MIGDevice) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("ошибка чтения вывода: %v", err)
+		return fmt.Errorf("error reading the output: %v", err)
 	}
 
 	return nil
@@ -336,13 +332,10 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 	hostname := string(EXECUTE_COMMAND(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
 
-	migs := false
-
-	migDevices, err := ParseNvidiaSMI(string(EXECUTE_COMMAND(NVIDIA_SMI)))
+	migDevices, _ := ParseNvidiaSMI(string(EXECUTE_COMMAND(NVIDIA_SMI)))
 
 	mig_totals := make(map[string]*MIGPROFILES)
-	if migDevices != nil {
-		migs = true
+	if len(migDevices) != 0 {
 
 		gpu_mig_profiles := parseMIGProfiles()
 		gpu_count := len(gpu_mig_profiles)
@@ -389,16 +382,17 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 		GpusMap[gpu_index].memory_used, _ = strconv.ParseFloat(strings.Fields(split[5])[0], 64)
 		GpusMap[gpu_index].memory_used, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", GpusMap[gpu_index].memory_used/GpusMap[gpu_index].memory_total*100), 64)
 
-		if migs {
+		GpusMap[gpu_index].temperature, _ = strconv.ParseFloat(strings.Fields(split[8])[0], 64)
+		GpusMap[gpu_index].index = strings.Fields(split[12])[0]
+		GpusMap[gpu_index].mig_mode = strings.Fields(split[13])[0]
+
+		if GpusMap[gpu_index].mig_mode == "Enabled" {
 			GpusMap[gpu_index].total_gpu_usage, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", mig_totals[gpu_index].SM*100), 64)
 			GpusMap[gpu_index].total_memory_usage, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", mig_totals[gpu_index].MEM*100), 64)
 		} else {
 			GpusMap[gpu_index].total_gpu_usage, _ = strconv.ParseFloat(strings.Fields(split[6])[0], 64)
 			GpusMap[gpu_index].total_memory_usage, _ = strconv.ParseFloat(strings.Fields(split[7])[0], 64)
 		}
-		GpusMap[gpu_index].temperature, _ = strconv.ParseFloat(strings.Fields(split[8])[0], 64)
-		GpusMap[gpu_index].index = strings.Fields(split[12])[0]
-		GpusMap[gpu_index].mig_mode = strings.Fields(split[13])[0]
 		GpusMap[gpu_index].hostname = hostname
 	}
 
@@ -413,13 +407,12 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 			split := strings.Fields(line)
 			target_pid := split[1]
 			sm := "0"
-			index := "0"
+			index := split[0]
 			mig_name := ""
-			if migs {
+			if GpusMap[index].mig_mode == "Enabled" {
 				sm, mig_name, index = FindPIDMetrics(target_pid, migDevices)
 			} else {
 				sm = split[3]
-				index = split[0]
 			}
 
 			for _, pid_line := range slurm_pid_lines {
@@ -445,7 +438,7 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 						nvidia_pid[split[1]].allocated_memory = 0
 					}
 
-					if migs {
+					if GpusMap[index].mig_mode == "Enabled" {
 						nvidia_pid[split[1]].mig_name = mig_name
 					}
 				}
