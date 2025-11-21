@@ -46,7 +46,7 @@ type MIGDevice struct {
 	MemoryUsage   float64
 	ProfileID     string
 	ProfileName   string
-	Processes     []ProcessInfo
+	Processes     []string
 }
 
 type MIGPROFILES struct {
@@ -55,10 +55,12 @@ type MIGPROFILES struct {
 }
 
 type ProcessInfo struct {
-	PID    string
-	Type   string
-	Name   string
-	GPUMem string
+	GPUID    string
+	Type     string
+	Name     string
+	GPUMem   float64
+	MIG_NAME string
+	sm       string
 }
 
 type ProcessNvidia struct {
@@ -113,42 +115,6 @@ func ParseDcgmiDmon(output string, migDevices map[string]*MIGDevice) map[string]
 	return total_gpus
 }
 
-func FindProcessByPID(nvidiaSMIOutput string, pid string) (*ProcessNvidia, error) {
-	scanner := bufio.NewScanner(strings.NewReader(nvidiaSMIOutput))
-
-	processHeaderRegex := regexp.MustCompile(`^\|\s+GPU\s+GI\s+CI\s+PID\s+Type\s+Process name\s+GPU Memory\s+\|`)
-	processDataRegex := regexp.MustCompile(`^\|\s+(\d+)\s+\S+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+(\d+)MiB\s+\|`)
-
-	inProcessSection := false
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if processHeaderRegex.MatchString(line) {
-			inProcessSection = true
-			continue
-		}
-
-		if strings.HasPrefix(line, "===") || strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		if inProcessSection {
-			matches := processDataRegex.FindStringSubmatch(line)
-			if len(matches) == 4 && matches[2] == pid {
-				gpuID := matches[1]
-				memoryMB, _ := strconv.ParseFloat(matches[3], 64)
-
-				return &ProcessNvidia{
-					GPUID:    gpuID,
-					MemoryMB: memoryMB,
-				}, nil
-			}
-		}
-	}
-
-	return nil, fmt.Errorf("process with PID %s not found", pid)
-}
-
 func FindEntityID(gpu, gi, ci int) string {
 	scanner := bufio.NewScanner(strings.NewReader(string(EXECUTE_COMMAND(DCGMI_DISCOVERY))))
 
@@ -168,8 +134,9 @@ func FindEntityID(gpu, gi, ci int) string {
 	return ""
 }
 
-func ParseNvidiaSMI(output string) (map[string]*MIGDevice, error) {
+func ParseNvidiaSMI(output string) (map[string]*MIGDevice, map[string]*ProcessInfo, error) {
 	migDevices := make(map[string]*MIGDevice)
+	processes := make(map[string]*ProcessInfo)
 	scanner := bufio.NewScanner(strings.NewReader(output))
 
 	migHeaderRegex := regexp.MustCompile(`^\| GPU\s+GI\s+CI\s+MIG\s+\|`)
@@ -222,26 +189,27 @@ func ParseNvidiaSMI(output string) (map[string]*MIGDevice, error) {
 				pid := matches[4]
 				procType := matches[5]
 				procName := strings.TrimSpace(matches[6])
-				gpuMem := matches[7]
+				gpuMem, _ := strconv.ParseFloat(matches[7], 64)
 
 				key := fmt.Sprintf("%d-%d-%d", gpu, gi, ci)
 				if device, exists := migDevices[key]; exists {
-					device.Processes = append(device.Processes, ProcessInfo{
-						PID:    pid,
-						Type:   procType,
-						Name:   procName,
-						GPUMem: gpuMem,
-					})
+					device.Processes = append(device.Processes, pid)
+				}
+				processes[pid] = &ProcessInfo{
+					GPUID:  matches[1],
+					Type:   procType,
+					Name:   procName,
+					GPUMem: gpuMem,
 				}
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return migDevices, nil
+	return migDevices, processes, nil
 }
 
 func SetMigProfileInfo(migDevices map[string]*MIGDevice) error {
@@ -279,18 +247,6 @@ func SetMigProfileInfo(migDevices map[string]*MIGDevice) error {
 	return nil
 }
 
-func FindPIDMetrics(pid string, migDevices map[string]*MIGDevice) (string, string, string) {
-	for _, device := range migDevices {
-		for _, process := range device.Processes {
-			if process.PID == pid {
-				sm := fmt.Sprintf("%.1f", device.InstanceUsage)
-				return sm, device.ProfileName, strconv.Itoa(device.GPU)
-			}
-		}
-	}
-	return "0", "", "0"
-}
-
 func parseMIGProfiles() map[string]map[string]*MIGPROFILES {
 	result := make(map[string]map[string]*MIGPROFILES)
 
@@ -313,7 +269,7 @@ func parseMIGProfiles() map[string]map[string]*MIGPROFILES {
 			memory, _ := strconv.ParseFloat(matches[3], 64)
 			sm, _ := strconv.ParseFloat(matches[4], 64)
 
-			if result[gpuID] == nil {
+			if _, exists := result[gpuID]; !exists {
 				result[gpuID] = make(map[string]*MIGPROFILES, 7)
 			}
 
@@ -332,7 +288,7 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 	hostname := string(EXECUTE_COMMAND(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
 
-	migDevices, _ := ParseNvidiaSMI(string(EXECUTE_COMMAND(NVIDIA_SMI)))
+	migDevices, processes, _ := ParseNvidiaSMI(string(EXECUTE_COMMAND(NVIDIA_SMI)))
 
 	mig_totals := make(map[string]*MIGPROFILES)
 	if len(migDevices) != 0 {
@@ -340,21 +296,24 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 		gpu_mig_profiles := parseMIGProfiles()
 		gpu_count := len(gpu_mig_profiles)
 
-		dcgmi_dmon_comm := "dcgmi dmon -e 1002,1005 -i "
-		gpu_str := ""
+		var builder strings.Builder
+
+		builder.WriteString("dcgmi dmon -e 1002,1005 -i ")
 
 		for i := 0; i < gpu_count; i++ {
-			if i == gpu_count-1 {
-				gpu_str = gpu_str + fmt.Sprintf("%d", i)
-			} else {
-				gpu_str = gpu_str + fmt.Sprintf("%d", i) + ","
+			if i > 0 {
+				builder.WriteString(",")
 			}
+			builder.WriteString(strconv.Itoa(i))
 		}
-		dcgmi_dmon_comm = dcgmi_dmon_comm + gpu_str
+
 		for _, device := range migDevices {
-			dcgmi_dmon_comm = dcgmi_dmon_comm + fmt.Sprintf(",ci:%d", device.MigDev)
+			builder.WriteString(fmt.Sprintf(",ci:%d", device.MigDev))
 		}
-		dcgmi_dmon_comm = dcgmi_dmon_comm + " -c 1"
+
+		builder.WriteString(" -c 1")
+
+		dcgmi_dmon_comm := builder.String()
 		mig_totals = ParseDcgmiDmon(string(EXECUTE_COMMAND(dcgmi_dmon_comm)), migDevices)
 
 		SetMigProfileInfo(migDevices)
@@ -362,6 +321,10 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 		for _, device := range migDevices {
 			device.InstanceUsage, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", device.InstanceUsage*(gpu_mig_profiles[strconv.Itoa(device.GPU)][device.ProfileID].SM/gpu_mig_profiles[strconv.Itoa(device.GPU)]["0"].SM)*100), 64)
 			device.MemoryUsage, _ = strconv.ParseFloat(fmt.Sprintf("%.1f", device.MemoryUsage*(gpu_mig_profiles[strconv.Itoa(device.GPU)][device.ProfileID].MEM/gpu_mig_profiles[strconv.Itoa(device.GPU)]["0"].MEM)*100), 64)
+			for _, process := range device.Processes {
+				processes[process].MIG_NAME = device.ProfileName
+				processes[process].sm = fmt.Sprintf("%.1f", device.InstanceUsage)
+			}
 		}
 
 	}
@@ -410,7 +373,13 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 			index := split[0]
 			mig_name := ""
 			if GpusMap[index].mig_mode == "Enabled" {
-				sm, mig_name, index = FindPIDMetrics(target_pid, migDevices)
+				if _, exists := processes[target_pid]; exists {
+					sm = processes[target_pid].sm
+					mig_name = processes[target_pid].MIG_NAME
+				} else {
+					sm = "0"
+					mig_name = ""
+				}
 			} else {
 				sm = split[3]
 			}
@@ -425,15 +394,26 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUusage) {
 					}
 
 					nvidia_pid[split[1]] = &GPUusage{}
-					nvidia_pid[split[1]].gpu_usage = nvidia_pid[split[1]].gpu_usage + nvidia_sm
+					if GpusMap[index].mig_mode != "Enabled" {
+						nvidia_pid[split[1]].gpu_usage = nvidia_pid[split[1]].gpu_usage + nvidia_sm
+					} else {
+						nvidia_pid[split[1]].gpu_usage = nvidia_sm
+					}
 					nvidia_pid[split[1]].hostname = hostname
 					nvidia_pid[split[1]].index = index
-					nvidia_proc_info, _ := FindProcessByPID(string(EXECUTE_COMMAND(NVIDIA_SMI)), split[0])
-					if nvidia_proc_info != nil {
+
+					if _, exists := processes[split[0]]; exists {
+
+						nvidia_proc_info := ProcessNvidia{
+							GPUID:    processes[split[0]].GPUID,
+							MemoryMB: processes[split[0]].GPUMem,
+						}
+
 						nvidia_pid[split[1]].allocated_memory, err = strconv.ParseFloat(fmt.Sprintf("%.1f", nvidia_proc_info.MemoryMB/GpusMap[nvidia_proc_info.GPUID].memory_total*100), 64)
 						if err != nil {
 							nvidia_pid[split[1]].allocated_memory = 0
 						}
+
 					} else {
 						nvidia_pid[split[1]].allocated_memory = 0
 					}
