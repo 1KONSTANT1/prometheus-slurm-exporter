@@ -64,7 +64,7 @@ func ShiftTimeBack(inputTime string) string {
 }
 
 func JobGetMetrics() (map[string]*JobsMetrics, map[string]*CompletedJobsMetrics) {
-	return ParseJobMetrics(EXECUTE_COMMAND(SQUEUE))
+	return ParseJobMetrics(ExecuteCommand(SQUEUE))
 }
 
 // ParseNodeMetrics takes the output of sinfo with node data

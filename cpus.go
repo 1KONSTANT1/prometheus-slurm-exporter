@@ -150,10 +150,10 @@ func parseSlurmOutput(slurmStr string, node_name string) (float64, float64) {
 
 func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*jobpcpuram, *RAMmetrics) {
 	var ccm NewCPUsMetrics
-	hostname := string(EXECUTE_COMMAND(HOSTNAME))
+	hostname := string(ExecuteCommand(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
 
-	lines := strings.Split(string(EXECUTE_COMMAND(CPU_INFO)), "\n")
+	lines := strings.Split(string(ExecuteCommand(CPU_INFO)), "\n")
 	ccm.architecture = managestring(lines[0])
 	ccm.cpu_mode = managestring(lines[1])
 	ccm.byte_order = managestring(lines[3])
@@ -203,7 +203,7 @@ func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*jobpcpuram, *RAMmetrics) {
 	}
 
 	var rrm RAMmetrics
-	lines = strings.Split(string(EXECUTE_COMMAND(RAM_INFO)), "\n")
+	lines = strings.Split(string(ExecuteCommand(RAM_INFO)), "\n")
 	split := strings.Fields(lines[1])
 	rrm.total, _ = strconv.ParseFloat(split[1], 64)
 	rrm.used, _ = strconv.ParseFloat(split[2], 64)

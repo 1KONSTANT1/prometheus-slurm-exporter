@@ -59,7 +59,7 @@ type QOSMetrics struct {
 
 func ParseAcctMetrics() (map[int]*AcctMetrics, map[string]*QOSMetrics) {
 	assocs := make(map[int]*AcctMetrics)
-	lines := strings.Split(string(EXECUTE_COMMAND(SACCT_SHOW_ASSOC)), "\n")
+	lines := strings.Split(string(ExecuteCommand(SACCT_SHOW_ASSOC)), "\n")
 	i := 0
 
 	for _, line := range lines {
@@ -163,7 +163,7 @@ func ParseAcctMetrics() (map[int]*AcctMetrics, map[string]*QOSMetrics) {
 		i = i + 1
 	}
 	qoss := make(map[string]*QOSMetrics)
-	lines = strings.Split(string(EXECUTE_COMMAND(SACCT_SHOW_QOS)), "\n")
+	lines = strings.Split(string(ExecuteCommand(SACCT_SHOW_QOS)), "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")

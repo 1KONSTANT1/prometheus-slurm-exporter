@@ -38,7 +38,7 @@ type Jobio struct {
 }
 
 func DiskGetMetrics() (map[string]*DiskMetrics, map[string]*Jobio, map[string]*DiskStats) {
-	return ParseDiskMetrics(EXECUTE_COMMAND(LSBLK))
+	return ParseDiskMetrics(ExecuteCommand(LSBLK))
 }
 
 func readProcIO(pid string) string {
@@ -67,7 +67,7 @@ func readProcIO(pid string) string {
 // It returns a map of metrics per node
 func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio, map[string]*DiskStats) {
 	disk_info := make(map[string]*DiskMetrics)
-	hostname := string(EXECUTE_COMMAND(HOSTNAME))
+	hostname := string(ExecuteCommand(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
 
 	lines := strings.Split(string(input), "\n")

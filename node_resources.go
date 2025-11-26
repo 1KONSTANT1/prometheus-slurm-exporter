@@ -32,8 +32,8 @@ func NodeResGetMetrics() map[string]*NodeResMetrics {
 // It returns a map of metrics per node
 func ParseNodeResMetrics() map[string]*NodeResMetrics {
 	nodes := make(map[string]*NodeResMetrics)
-	lines := strings.Split(string(EXECUTE_COMMAND(SCONTROL_SHOW_NODES)), "\n")
-	lines_etc := strings.Split(string(EXECUTE_COMMAND(SHOW_HOSTS)), "\n")
+	lines := strings.Split(string(ExecuteCommand(SCONTROL_SHOW_NODES)), "\n")
+	lines_etc := strings.Split(string(ExecuteCommand(SHOW_HOSTS)), "\n")
 
 	// Sort and remove all the duplicates from the 'sinfo' output
 	sort.Strings(lines)

@@ -28,11 +28,11 @@ type InterfaceStats struct {
 }
 
 func NetworkGetMetrics() map[string]*InterfaceStats {
-	return ParseNetworkMetrics(EXECUTE_COMMAND(SHOW_LINKS))
+	return ParseNetworkMetrics(ExecuteCommand(SHOW_LINKS))
 }
 
 func ParseNetworkMetrics(input []byte) map[string]*InterfaceStats {
-	hostname := string(EXECUTE_COMMAND(HOSTNAME))
+	hostname := string(ExecuteCommand(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
 
 	interfaces := make(map[string]*InterfaceStats, 5)

@@ -21,8 +21,8 @@ type NewPartitionMetrics struct {
 
 func ParsePartitionsMetrics() map[string]*NewPartitionMetrics {
 	partitions_info := make(map[string]*NewPartitionMetrics)
-	lines := strings.Split(string(EXECUTE_COMMAND(SINFO_PARTITIONS)), "\n")
-	partition_scontrol := string(EXECUTE_COMMAND(SCONTROL_SHOW_PARTITION))
+	lines := strings.Split(string(ExecuteCommand(SINFO_PARTITIONS)), "\n")
+	partition_scontrol := string(ExecuteCommand(SCONTROL_SHOW_PARTITION))
 	for _, line := range lines {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")

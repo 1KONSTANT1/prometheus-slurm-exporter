@@ -54,7 +54,7 @@ type PriorityConfigs struct {
 }
 
 func PrioGetMetrics() (map[string]*PrioMetrics, PriorityConfigs, map[string]*JobPrioMetrics) {
-	return ParsePrioMetrics(EXECUTE_COMMAND(SPRIO))
+	return ParsePrioMetrics(ExecuteCommand(SPRIO))
 }
 
 // ParseNodeMetrics takes the output of sinfo with node data
@@ -99,7 +99,7 @@ func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs, m
 		}
 	}
 	config := PriorityConfigs{}
-	lines = strings.Split(string(EXECUTE_COMMAND(SCONTROL_SHOW_CONF)), "\n")
+	lines = strings.Split(string(ExecuteCommand(SCONTROL_SHOW_CONF)), "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "PriorityWeightTRES") {
 			config.PriorityWeightTRES = strings.Fields(line)[2]

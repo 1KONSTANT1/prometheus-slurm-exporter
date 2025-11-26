@@ -28,7 +28,7 @@ const (
 	RAM_INFO                string = "free -b"
 )
 
-func EXECUTE_COMMAND(comm string) []byte {
+func ExecuteCommand(comm string) []byte {
 	cmd := exec.Command("/bin/bash", "-c", comm)
 	out, err := cmd.Output()
 	if err != nil {
