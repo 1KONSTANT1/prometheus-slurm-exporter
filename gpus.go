@@ -31,6 +31,7 @@ type GPUUsage struct {
 	hostname        string
 	index           string
 	migName         string
+	jobID           string
 }
 
 func GPUsGetMetrics() (map[string]*GPUsMetrics, map[string]*GPUUsage) {
@@ -59,6 +60,8 @@ type ProcessInfo struct {
 	GPUMem  float64
 	MigName string
 	sm      string
+	GI      string
+	CI      string
 }
 
 func ParseDcgmiDmon(output string, migDevices map[string]*MIGDevice) map[string]*MIGProfiles {
@@ -195,6 +198,8 @@ func ParseNvidiaSMI(output string) (map[string]*MIGDevice, map[string]*ProcessIn
 				processes[pid] = &ProcessInfo{
 					GPUID:  matches[1],
 					GPUMem: gpuMem,
+					GI:     gi,
+					CI:     ci,
 				}
 			}
 		}
@@ -375,29 +380,30 @@ func ParseGPUsMetrics() (map[string]*GPUsMetrics, map[string]*GPUUsage) {
 						nvidiaSm, _ = strconv.ParseFloat(sm, 64)
 					}
 
-					nvidiaPid[split[1]] = &GPUUsage{}
-					if gpusMap[index].migMode != "Enabled" {
-						nvidiaPid[split[1]].gpuUsage = nvidiaPid[split[1]].gpuUsage + nvidiaSm
-					} else {
-						nvidiaPid[split[1]].gpuUsage, _ = strconv.ParseFloat(processes[targetPid].sm, 64)
-						nvidiaPid[split[1]].migName = processes[targetPid].MigName
+					key := fmt.Sprintf("%s-%s-%s-%s", processes[split[0]].GPUID, processes[split[0]].GI, processes[split[0]].CI, split[1])
+					if _, exists := nvidiaPid[key]; !exists {
+						nvidiaPid[key] = &GPUUsage{}
 					}
-					nvidiaPid[split[1]].hostname = hostname
-					nvidiaPid[split[1]].index = index
+
+					if gpusMap[index].migMode != "Enabled" {
+						nvidiaPid[key].gpuUsage = nvidiaPid[key].gpuUsage + nvidiaSm
+					} else {
+						nvidiaPid[key].gpuUsage, _ = strconv.ParseFloat(processes[targetPid].sm, 64)
+						nvidiaPid[key].migName = processes[targetPid].MigName
+					}
+					nvidiaPid[key].hostname = hostname
+					nvidiaPid[key].index = index
+
+					nvidiaPid[key].jobID = split[1]
 
 					if _, exists := processes[split[0]]; exists {
 
-						nvidiaAllocMem, err := strconv.ParseFloat(fmt.Sprintf("%.1f", processes[split[0]].GPUMem/gpusMap[processes[split[0]].GPUID].memoryTotal*100), 64)
+						nvidiaAllocMem, _ := strconv.ParseFloat(fmt.Sprintf("%.1f", processes[split[0]].GPUMem/gpusMap[processes[split[0]].GPUID].memoryTotal*100), 64)
+						nvidiaPid[key].allocatedMemory = nvidiaPid[key].allocatedMemory + nvidiaAllocMem
 
-						if err != nil {
-							nvidiaPid[split[1]].allocatedMemory = 0
-						}
-						nvidiaPid[split[1]].allocatedMemory = nvidiaPid[split[1]].allocatedMemory + nvidiaAllocMem
-
-					} else {
-						nvidiaPid[split[1]].allocatedMemory = 0
 					}
 				}
+				break
 			}
 
 		}
@@ -462,8 +468,8 @@ func (cc *GPUsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(cc.totalMemoryUsage, prometheus.GaugeValue, gpusInfo[gpu].totalMemoryUsage, gpusInfo[gpu].hostname, gpusInfo[gpu].index)
 		ch <- prometheus.MustNewConstMetric(cc.gpuTemp, prometheus.GaugeValue, gpusInfo[gpu].temperature, gpusInfo[gpu].hostname, gpusInfo[gpu].index)
 	}
-	for job := range nvidia {
-		ch <- prometheus.MustNewConstMetric(cc.gpuUsage, prometheus.GaugeValue, nvidia[job].gpuUsage, job, nvidia[job].hostname, nvidia[job].index, nvidia[job].migName)
-		ch <- prometheus.MustNewConstMetric(cc.allocatedMemory, prometheus.GaugeValue, nvidia[job].allocatedMemory, job, nvidia[job].hostname, nvidia[job].index, nvidia[job].migName)
+	for _, job_value := range nvidia {
+		ch <- prometheus.MustNewConstMetric(cc.gpuUsage, prometheus.GaugeValue, job_value.gpuUsage, job_value.jobID, job_value.hostname, job_value.index, job_value.migName)
+		ch <- prometheus.MustNewConstMetric(cc.allocatedMemory, prometheus.GaugeValue, job_value.allocatedMemory, job_value.jobID, job_value.hostname, job_value.index, job_value.migName)
 	}
 }
