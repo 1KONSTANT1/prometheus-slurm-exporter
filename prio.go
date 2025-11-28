@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,7 +54,7 @@ type PriorityConfigs struct {
 }
 
 func PrioGetMetrics() (map[string]*PrioMetrics, PriorityConfigs, map[string]*JobPrioMetrics) {
-	return ParsePrioMetrics(PrioData())
+	return ParsePrioMetrics(ExecuteCommand(SPRIO))
 }
 
 // ParseNodeMetrics takes the output of sinfo with node data
@@ -101,7 +99,7 @@ func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs, m
 		}
 	}
 	config := PriorityConfigs{}
-	lines = strings.Split(string(PrioConfig()), "\n")
+	lines = strings.Split(string(ExecuteCommand(SCONTROL_SHOW_CONF)), "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "PriorityWeightTRES") {
 			config.PriorityWeightTRES = strings.Fields(line)[2]
@@ -166,33 +164,6 @@ func ParsePrioMetrics(input []byte) (map[string]*PrioMetrics, PriorityConfigs, m
 
 // NodeData executes the sinfo command to get data for each node
 // It returns the output of the sinfo command
-func PrioData() []byte {
-	cmd := exec.Command("sprio", "-h", "-o \"%i|%Y|%A|%B|%P|%J|%n|%N|%o|%Q|%r|%T|%u\"")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing sprio command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing sprio command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
-
-func PrioConfig() []byte {
-	cmd := exec.Command("scontrol", "show", "conf")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing scontrol conf command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing scontrol conf command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
 
 type PrioCollector struct {
 	prio                 *prometheus.Desc

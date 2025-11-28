@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-	"os/exec"
 	"sort"
 	"strings"
 
@@ -27,15 +25,15 @@ type NodeResMetrics struct {
 }
 
 func NodeResGetMetrics() map[string]*NodeResMetrics {
-	return ParseNodeResMetrics(NodeResData())
+	return ParseNodeResMetrics()
 }
 
 // ParseNodeMetrics takes the output of sinfo with node data
 // It returns a map of metrics per node
-func ParseNodeResMetrics(input []byte, input2 []byte) map[string]*NodeResMetrics {
+func ParseNodeResMetrics() map[string]*NodeResMetrics {
 	nodes := make(map[string]*NodeResMetrics)
-	lines := strings.Split(string(input), "\n")
-	lines_etc := strings.Split(string(input2), "\n")
+	lines := strings.Split(string(ExecuteCommand(SCONTROL_SHOW_NODES)), "\n")
+	lines_etc := strings.Split(string(ExecuteCommand(SHOW_HOSTS)), "\n")
 
 	// Sort and remove all the duplicates from the 'sinfo' output
 	sort.Strings(lines)
@@ -106,32 +104,6 @@ func ParseNodeResMetrics(input []byte, input2 []byte) map[string]*NodeResMetrics
 	}
 
 	return nodes
-}
-
-// NodeData executes the sinfo command to get data for each node
-// It returns the output of the sinfo command
-func NodeResData() ([]byte, []byte) {
-	cmd := exec.Command("scontrol", "show", "nodes", "-d", "-o")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing scontrol show nodes command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing scontrol show nodes command: %v", err)
-		}
-		out = []byte("")
-	}
-	cmd2 := exec.Command("cat", "/etc/hosts")
-	out2, err := cmd2.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing cat /etc/hosts command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing cat /etc/hosts command: %v", err)
-		}
-		out2 = []byte("")
-	}
-	return out, out2
 }
 
 type NodeResCollector struct {

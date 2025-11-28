@@ -150,12 +150,10 @@ func parseSlurmOutput(slurmStr string, node_name string) (float64, float64) {
 
 func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*jobpcpuram, *RAMmetrics) {
 	var ccm NewCPUsMetrics
-	hostname := string(GetHostName())
+	hostname := string(ExecuteCommand(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
-	if strings.Contains(hostname, ".") {
-		hostname = strings.Split(hostname, ".")[0]
-	}
-	lines := strings.Split(string(CPUquery()), "\n")
+
+	lines := strings.Split(string(ExecuteCommand(CPU_INFO)), "\n")
 	ccm.architecture = managestring(lines[0])
 	ccm.cpu_mode = managestring(lines[1])
 	ccm.byte_order = managestring(lines[3])
@@ -205,7 +203,7 @@ func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*jobpcpuram, *RAMmetrics) {
 	}
 
 	var rrm RAMmetrics
-	lines = strings.Split(string(RAMquery()), "\n")
+	lines = strings.Split(string(ExecuteCommand(RAM_INFO)), "\n")
 	split := strings.Fields(lines[1])
 	rrm.total, _ = strconv.ParseFloat(split[1], 64)
 	rrm.used, _ = strconv.ParseFloat(split[2], 64)
@@ -220,34 +218,6 @@ func ParseCPUsMetrics() (*NewCPUsMetrics, map[string]*jobpcpuram, *RAMmetrics) {
 	rrm.free_swap, _ = strconv.ParseFloat(split[3], 64)
 
 	return &ccm, job_cpu_pids, &rrm
-}
-
-func CPUquery() []byte {
-	cmd := exec.Command("/bin/bash", "-c", "lscpu")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing lscpu command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing lscpu command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
-
-func RAMquery() []byte {
-	cmd := exec.Command("/bin/bash", "-c", "free -b")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing free command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing free command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
 }
 
 /*

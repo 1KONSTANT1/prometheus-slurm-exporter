@@ -38,7 +38,7 @@ type Jobio struct {
 }
 
 func DiskGetMetrics() (map[string]*DiskMetrics, map[string]*Jobio, map[string]*DiskStats) {
-	return ParseDiskMetrics(DiskData())
+	return ParseDiskMetrics(ExecuteCommand(LSBLK))
 }
 
 func readProcIO(pid string) string {
@@ -67,11 +67,9 @@ func readProcIO(pid string) string {
 // It returns a map of metrics per node
 func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio, map[string]*DiskStats) {
 	disk_info := make(map[string]*DiskMetrics)
-	hostname := string(GetHostName())
+	hostname := string(ExecuteCommand(HOSTNAME))
 	hostname = strings.ReplaceAll(hostname, "\n", "")
-	if strings.Contains(hostname, ".") {
-		hostname = strings.Split(hostname, ".")[0]
-	}
+
 	lines := strings.Split(string(input), "\n")
 	for _, line := range lines {
 		if len(line) < 2 {
@@ -167,22 +165,6 @@ func ParseDiskMetrics(input []byte) (map[string]*DiskMetrics, map[string]*Jobio,
 	}
 
 	return disk_info, jobs_io, disk_ops
-}
-
-// NodeData executes the sinfo command to get data for each node
-// It returns the output of the sinfo command
-func DiskData() []byte {
-	cmd := exec.Command("lsblk", "-Pb", "-o", "NAME,FSAVAIL,FSSIZE,SIZE,TYPE,PKNAME,MOUNTPOINTS")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing lsblk command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing lsblk command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
 }
 
 func GetDiskstatsAsString() string {

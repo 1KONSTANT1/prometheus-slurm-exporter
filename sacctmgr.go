@@ -1,40 +1,10 @@
 package main
 
 import (
-	"log"
-	"os/exec"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
-
-func NewAcctData() []byte {
-	cmd := exec.Command("sacctmgr", "-n", "-p", "show", "assoc")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing sacctmgr assoc command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing sacctmgr assoc command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
-
-func GetQOSData() []byte {
-	cmd := exec.Command("sacctmgr", "-n", "-p", "show", "qos")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing sacctmgr qos command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing sacctmgr qos command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
-}
 
 type AcctMetrics struct {
 	cluster        string
@@ -89,7 +59,7 @@ type QOSMetrics struct {
 
 func ParseAcctMetrics() (map[int]*AcctMetrics, map[string]*QOSMetrics) {
 	assocs := make(map[int]*AcctMetrics)
-	lines := strings.Split(string(NewAcctData()), "\n")
+	lines := strings.Split(string(ExecuteCommand(SACCT_SHOW_ASSOC)), "\n")
 	i := 0
 
 	for _, line := range lines {
@@ -193,7 +163,7 @@ func ParseAcctMetrics() (map[int]*AcctMetrics, map[string]*QOSMetrics) {
 		i = i + 1
 	}
 	qoss := make(map[string]*QOSMetrics)
-	lines = strings.Split(string(GetQOSData()), "\n")
+	lines = strings.Split(string(ExecuteCommand(SACCT_SHOW_QOS)), "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "|") {
 			split := strings.Split(line, "|")

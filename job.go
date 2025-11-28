@@ -64,7 +64,7 @@ func ShiftTimeBack(inputTime string) string {
 }
 
 func JobGetMetrics() (map[string]*JobsMetrics, map[string]*CompletedJobsMetrics) {
-	return ParseJobMetrics(JobData())
+	return ParseJobMetrics(ExecuteCommand(SQUEUE))
 }
 
 // ParseNodeMetrics takes the output of sinfo with node data
@@ -144,20 +144,6 @@ func ParseJobMetrics(input []byte) (map[string]*JobsMetrics, map[string]*Complet
 	}
 
 	return jobs, completed_jobs
-}
-
-func JobData() []byte {
-	cmd := exec.Command("/bin/bash", "-c", "squeue -a -r -h -O \"JOBID:|,SubmitTime:|,STARTTIME:|,ENDTIME:|,TIMELIMIT:|,TIMELEFT:|,TIMEUSED:|,STATE:|,REASON:|,USERNAME:|,GroupNAME:|,PRIORITYLONG:|,NODELIST:|,NumCPUs:|,MinMemory:|,ACCOUNT:|,ReasonList:|,MinTmpDisk:|,tres-per-node:|,QOS:|,tres-alloc:|,PARTITION\"")
-	out, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Printf("Error executing squeue command: %v, stderr: %s", err, exitErr.Stderr)
-		} else {
-			log.Printf("Error executing squeue command: %v", err)
-		}
-		return []byte("")
-	}
-	return out
 }
 
 func CompletedJobData() []byte {
