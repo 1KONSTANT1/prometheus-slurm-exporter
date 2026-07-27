@@ -138,7 +138,7 @@ func ParseNvidiaSMI(output string) (map[string]*MIGDevice, map[string]*ProcessIn
 	migHeaderRegex := regexp.MustCompile(`^\| GPU\s+GI\s+CI\s+MIG\s+\|`)
 	migDataRegex := regexp.MustCompile(`^\|\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\|`)
 	processHeaderRegex := regexp.MustCompile(`^\|\s+GPU\s+GI\s+CI\s+.+PID\s+Type\s+Process name\s+GPU Memory\s+\|`)
-	processDataRegex := regexp.MustCompile(`^\|\s+(\d+)\s+([\w\/]+)\s+([\w\/]+)\s+(\d+)\s+(\w+)\s+(\w+)\s+(\d+)MiB\s+\|`)
+	processDataRegex := regexp.MustCompile(`^\|\s+(\d+)\s+([\w\/]+)\s+([\w\/]+)\s+(\d+)\s+(\w+)\s+(.+?)\s+(\d+)MiB\s+\|`)
 
 	inMIGSection := false
 	inProcessSection := false
